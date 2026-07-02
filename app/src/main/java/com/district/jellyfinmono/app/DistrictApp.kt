@@ -1087,8 +1087,8 @@ private fun NowPlayingFromState(playerState: PlayerState, actions: AppActions) {
         coverColor = sampledTint,
         tintColor = sampledTint,
         modifier = Modifier
-            .testTag("now-playing-bar")
-            .clickable(enabled = track != null && error == null, onClick = actions.playPause),
+            .testTag("now-playing-bar"),
+        onTogglePlayback = if (track != null && error == null) actions.playPause else null,
         cover = coverResource?.let { resource ->
             {
                 AsyncImage(
@@ -1184,6 +1184,7 @@ private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
+            .testTag("playback-scrub-ruler")
             .background(MonoTokens.Line)
             .pointerInput(Unit) {
                 detectTapGestures { offset -> onChange(horizontalFraction(offset.x, size.width.toFloat())) }

@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -204,6 +205,7 @@ fun MonoNowPlayingBar(
     tintColor: Color = coverColor,
     modifier: Modifier = Modifier,
     cover: (@Composable () -> Unit)? = null,
+    onTogglePlayback: (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -214,11 +216,26 @@ fun MonoNowPlayingBar(
     ) {
         Box(
             modifier = Modifier
-                .size(34.dp)
-                .background(coverColor)
-                .border(1.dp, MonoTokens.Line2),
+                .size(ShellMetrics.MinTouchTarget)
+                .then(
+                    if (onTogglePlayback != null) {
+                        Modifier
+                            .testTag("now-playing-toggle")
+                            .clickable(onClick = onTogglePlayback)
+                    } else {
+                        Modifier
+                    },
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            cover?.invoke()
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .background(coverColor)
+                    .border(1.dp, MonoTokens.Line2),
+            ) {
+                cover?.invoke()
+            }
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {

@@ -222,7 +222,7 @@ class DistrictAppUiTest {
     }
 
     @Test
-    fun pausedTrackCollapsesControlZoneAndNowPlayingCanResume() {
+    fun pausedTrackCollapsesControlZoneAndCoverCanResume() {
         val track = track()
         var playPauseCalls = 0
         compose.setContent {
@@ -245,9 +245,42 @@ class DistrictAppUiTest {
         compose.onNodeWithText("PAUSE - NOW").assertIsDisplayed()
         compose.onNodeWithText("CONTROL / SCRUB").assertDoesNotExist()
 
-        compose.onNodeWithTag("now-playing-bar").performClick()
+        compose.onNodeWithTag("now-playing-toggle").performClick()
 
         assertEquals(1, playPauseCalls)
+    }
+
+    @Test
+    fun scrubRulerSeeksWithoutTogglingPlayback() {
+        val track = track()
+        var seekCalls = 0
+        var playPauseCalls = 0
+        compose.setContent {
+            DistrictAppContent(
+                AppUiState.Library(
+                    LibraryUiState(
+                        session = session(),
+                        playerState = PlayerState(
+                            queue = listOf(track),
+                            currentTrack = track,
+                            isPlaying = true,
+                            durationMs = track.durationMs,
+                        ),
+                    ),
+                ),
+                actions = AppActions(
+                    seekToFraction = { seekCalls += 1 },
+                    playPause = { playPauseCalls += 1 },
+                ),
+            )
+        }
+
+        compose.onNodeWithTag("playback-scrub-ruler").performTouchInput {
+            swipeRight()
+        }
+
+        assertTrue("expected scrub gesture to seek", seekCalls > 0)
+        assertEquals(0, playPauseCalls)
     }
 
     @Test
