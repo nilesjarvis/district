@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -204,42 +205,78 @@ fun MonoNowPlayingBar(
     tintColor: Color = coverColor,
     modifier: Modifier = Modifier,
     cover: (@Composable () -> Unit)? = null,
+    onTitleClick: (() -> Unit)? = null,
+    onActionClick: (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
             .fillMaxSize()
             .background(coverTint(tintColor))
-            .padding(horizontal = 10.dp),
+            .padding(start = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .then(
+                    if (onTitleClick != null) {
+                        Modifier
+                            .testTag("now-playing-album-link")
+                            .clickable(onClick = onTitleClick)
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(end = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .background(coverColor)
+                    .border(1.dp, MonoTokens.Line2),
+            ) {
+                cover?.invoke()
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                UpperLabel("$code - NOW", color = MonoTokens.Mut2, fontSize = 8.sp)
+                Text(
+                    text = title,
+                    color = MonoTokens.Ink,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 11.sp,
+                )
+                Text(
+                    text = artist,
+                    color = MonoTokens.Mut,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 10.sp,
+                )
+            }
+        }
         Box(
             modifier = Modifier
-                .size(34.dp)
-                .background(coverColor)
-                .border(1.dp, MonoTokens.Line2),
+                .fillMaxHeight()
+                .defaultMinSize(minWidth = ShellMetrics.MinTouchTarget)
+                .then(
+                    if (onActionClick != null) {
+                        Modifier
+                            .testTag("now-playing-toggle")
+                            .clickable(onClick = onActionClick)
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(horizontal = 10.dp),
+            contentAlignment = Alignment.CenterEnd,
         ) {
-            cover?.invoke()
+            UpperLabel("$elapsed\n$duration", color = MonoTokens.Mut, fontSize = 8.sp)
         }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            UpperLabel("$code - NOW", color = MonoTokens.Mut2, fontSize = 8.sp)
-            Text(
-                text = title,
-                color = MonoTokens.Ink,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = 11.sp,
-            )
-            Text(
-                text = artist,
-                color = MonoTokens.Mut,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = 10.sp,
-            )
-        }
-        UpperLabel("$elapsed\n$duration", color = MonoTokens.Mut, fontSize = 8.sp)
     }
 }
 

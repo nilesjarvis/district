@@ -530,7 +530,10 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
     val targetControlZoneHeight = when {
         state.route == LibraryRoute.Search -> 0.dp
         state.playerState.currentTrack == null -> 0.dp
-        state.playerState.isPlaying || keepControlsExpandedForTrackHandoff -> ShellMetrics.ControlZoneHeight
+        // Key off playback intent, not isPlaying: a scrub re-buffers and momentarily flips
+        // isPlaying false, which would otherwise collapse the zone mid-drag. Stay open while
+        // playing or seeking; collapse only when the user pauses.
+        state.playerState.playWhenReady || keepControlsExpandedForTrackHandoff -> ShellMetrics.ControlZoneHeight
         else -> 0.dp
     }
     val controlZoneHeight by animateDpAsState(
@@ -551,7 +554,7 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
                 LibraryRoute.ArtistDetail -> ArtistDetailRegion(state, actions)
             }
         },
-        nowPlaying = { NowPlayingFromState(state.playerState, actions) },
+        nowPlaying = { NowPlayingFromState(state, actions) },
         controlZone = { PlayerControlZone(state.playerState, controlActions) },
         controlZoneHeight = controlZoneHeight,
     )
@@ -1149,8 +1152,10 @@ private fun Modifier.searchAutofocus(): Modifier {
 }
 
 @Composable
-private fun NowPlayingFromState(playerState: PlayerState, actions: AppActions) {
+private fun NowPlayingFromState(state: LibraryUiState, actions: AppActions) {
+    val playerState = state.playerState
     val track = playerState.currentTrack
+    val linkedAlbum = state.albumForTrack(track)
     val error = playerState.errorMessage?.takeIf { it.isNotBlank() }
     val context = LocalContext.current
     val coverResource = track?.coverArt
@@ -1187,8 +1192,11 @@ private fun NowPlayingFromState(playerState: PlayerState, actions: AppActions) {
         coverColor = sampledTint,
         tintColor = sampledTint,
         modifier = Modifier
-            .testTag("now-playing-bar")
-            .clickable(enabled = track != null && error == null, onClick = actions.playPause),
+            .testTag("now-playing-bar"),
+        onTitleClick = linkedAlbum?.let { album ->
+            { actions.openAlbum(album) }
+        },
+        onActionClick = if (track != null && error == null) actions.playPause else null,
         cover = coverResource?.let { resource ->
             {
                 AsyncImage(
@@ -1205,6 +1213,25 @@ private fun NowPlayingFromState(playerState: PlayerState, actions: AppActions) {
             }
         },
     )
+}
+
+private fun LibraryUiState.albumForTrack(track: Track?): Album? {
+    val albumId = track?.albumId?.takeIf { it.isNotBlank() } ?: return null
+    return sequenceOf(selectedAlbum)
+        .filterNotNull()
+        .plus(albums.asSequence())
+        .plus(searchResults.albums.asSequence())
+        .plus(artistAlbums.asSequence())
+        .firstOrNull { it.id == albumId }
+        ?: Album(
+            id = albumId,
+            title = "Current album",
+            artist = track.artist.ifBlank { "Unknown artist" },
+            productionYear = null,
+            trackCount = null,
+            coverArt = track.coverArt,
+            tintArgb = track.tintArgb,
+        )
 }
 
 @Composable
