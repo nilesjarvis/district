@@ -500,6 +500,10 @@ private fun StepButtons(left: String, onLeft: () -> Unit, right: String, onRight
 private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppActions()) {
     BackHandler(enabled = state.route != LibraryRoute.Albums, onBack = actions.backToLibrary)
     val albumGridState = rememberLazyGridState()
+    val albumDetailGridState = rememberLazyGridState()
+    LaunchedEffect(state.selectedAlbum?.id) {
+        albumDetailGridState.scrollToItem(0)
+    }
     var keepControlsExpandedForTrackHandoff by remember { mutableStateOf(false) }
     LaunchedEffect(keepControlsExpandedForTrackHandoff, state.playerState.currentTrack?.id) {
         if (keepControlsExpandedForTrackHandoff) {
@@ -537,7 +541,7 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
             when (state.route) {
                 LibraryRoute.Albums -> LibraryAlbumGrid(state, actions, albumGridState)
                 LibraryRoute.Search -> SearchResultsRegion(state, actions)
-                LibraryRoute.AlbumDetail -> AlbumDetailRegion(state, actions)
+                LibraryRoute.AlbumDetail -> AlbumDetailRegion(state, actions, albumDetailGridState)
             }
         },
         nowPlaying = { NowPlayingFromState(state.playerState, actions) },
@@ -812,12 +816,14 @@ private fun SearchTabs(results: SearchResults, query: String, loading: Boolean) 
 }
 
 @Composable
-private fun AlbumDetailRegion(state: LibraryUiState, actions: AppActions) {
+private fun AlbumDetailRegion(state: LibraryUiState, actions: AppActions, gridState: LazyGridState) {
     val album = state.selectedAlbum
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
+        state = gridState,
         modifier = Modifier
             .fillMaxSize()
+            .testTag("album-detail-grid")
             .background(MonoTokens.Line)
             .border(1.dp, MonoTokens.Line),
         horizontalArrangement = Arrangement.spacedBy(1.dp),
@@ -900,6 +906,7 @@ private fun AlbumDetailRegion(state: LibraryUiState, actions: AppActions) {
                     number = track.indexNumber?.toString()?.padStart(2, '0') ?: "--",
                     title = track.title,
                     duration = track.durationMs.formatDuration(),
+                    modifier = Modifier.testTag("album-track-${track.id}"),
                     isPlaying = state.playerState.currentTrack?.id == track.id,
                     onClick = { actions.playTrack(track) },
                 )

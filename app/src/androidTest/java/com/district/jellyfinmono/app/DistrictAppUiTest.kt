@@ -114,6 +114,55 @@ class DistrictAppUiTest {
     }
 
     @Test
+    fun albumScrollPositionSurvivesStartingPlayback() {
+        val album = Album("album-1", "Long Album", "District Artist", 2024, 40, null)
+        val tracks = (0 until 40).map { index ->
+            Track(
+                id = "track-$index",
+                title = "Track $index",
+                artist = "District Artist",
+                albumId = album.id,
+                indexNumber = index + 1,
+                durationMs = 180_000L,
+                stream = null,
+            )
+        }
+        var playerState by mutableStateOf(PlayerState())
+        compose.setContent {
+            Box(Modifier.size(width = 411.dp, height = 923.dp)) {
+                DistrictAppContent(
+                    AppUiState.Library(
+                        LibraryUiState(
+                            session = session(),
+                            route = LibraryRoute.AlbumDetail,
+                            selectedAlbum = album,
+                            albumTracks = tracks,
+                            playerState = playerState,
+                        ),
+                    ),
+                    actions = AppActions(
+                        playTrack = { track ->
+                            playerState = PlayerState(
+                                queue = tracks,
+                                currentTrack = track,
+                                isPlaying = true,
+                                durationMs = track.durationMs,
+                            )
+                        },
+                    ),
+                )
+            }
+        }
+
+        compose.onNodeWithTag("album-detail-grid").performScrollToIndex(24)
+        compose.onNodeWithText("Track 24").assertIsDisplayed()
+
+        compose.onNodeWithTag("album-track-track-24").performClick()
+
+        compose.onNodeWithText("Track 24").assertIsDisplayed()
+    }
+
+    @Test
     fun searchKeepsNowPlayingVisibleAndRemovesControlZoneForKeyboardSpace() {
         var route by mutableStateOf(LibraryRoute.Search)
         compose.setContent {
