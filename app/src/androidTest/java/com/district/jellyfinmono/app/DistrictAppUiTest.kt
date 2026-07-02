@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.unit.dp
@@ -69,6 +70,47 @@ class DistrictAppUiTest {
         val second = boundsForText("Ghost Notes")
         assertEquals(first.top, second.top, 2f)
         assertNotEquals(first.left, second.left)
+    }
+
+    @Test
+    fun libraryScrollPositionSurvivesAlbumRoundTrip() {
+        val albums = (0 until 40).map { index ->
+            Album("album-$index", "Album $index", "District Artist", 2024, 10, null)
+        }
+        var route by mutableStateOf(LibraryRoute.Albums)
+        var selectedAlbum by mutableStateOf<Album?>(null)
+        compose.setContent {
+            Box(Modifier.size(width = 411.dp, height = 923.dp)) {
+                DistrictAppContent(
+                    AppUiState.Library(
+                        LibraryUiState(
+                            session = session(),
+                            route = route,
+                            albums = albums,
+                            selectedAlbum = selectedAlbum,
+                        ),
+                    ),
+                    actions = AppActions(
+                        openAlbum = { album ->
+                            selectedAlbum = album
+                            route = LibraryRoute.AlbumDetail
+                        },
+                        backToLibrary = {
+                            selectedAlbum = null
+                            route = LibraryRoute.Albums
+                        },
+                    ),
+                )
+            }
+        }
+
+        compose.onNodeWithTag("library-album-grid").performScrollToIndex(24)
+        compose.onNodeWithText("Album 24").assertIsDisplayed()
+
+        compose.onNodeWithTag("album-tile-album-24").performClick()
+        compose.onNodeWithText("BACK").performClick()
+
+        compose.onNodeWithText("Album 24").assertIsDisplayed()
     }
 
     @Test

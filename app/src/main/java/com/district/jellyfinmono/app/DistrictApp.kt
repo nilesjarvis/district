@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -496,6 +497,7 @@ private fun StepButtons(left: String, onLeft: () -> Unit, right: String, onRight
 @Composable
 private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppActions()) {
     BackHandler(enabled = state.route != LibraryRoute.Albums, onBack = actions.backToLibrary)
+    val albumGridState = rememberLazyGridState()
     val targetControlZoneHeight = when {
         state.route == LibraryRoute.Search -> 0.dp
         state.playerState.currentTrack == null -> 0.dp
@@ -513,7 +515,7 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
         contextualBar = null,
         scrollRegion = {
             when (state.route) {
-                LibraryRoute.Albums -> LibraryAlbumGrid(state, actions)
+                LibraryRoute.Albums -> LibraryAlbumGrid(state, actions, albumGridState)
                 LibraryRoute.Search -> SearchResultsRegion(state, actions)
                 LibraryRoute.AlbumDetail -> AlbumDetailRegion(state, actions)
             }
@@ -620,12 +622,13 @@ private fun SearchGlyph(color: Color) {
 }
 
 @Composable
-private fun LibraryAlbumGrid(state: LibraryUiState, actions: AppActions) {
+private fun LibraryAlbumGrid(state: LibraryUiState, actions: AppActions, gridState: LazyGridState) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
-        state = rememberLazyGridState(),
+        state = gridState,
         modifier = Modifier
             .fillMaxSize()
+            .testTag("library-album-grid")
             .background(MonoTokens.Line)
             .border(1.dp, MonoTokens.Line),
         horizontalArrangement = Arrangement.spacedBy(1.dp),
@@ -947,6 +950,7 @@ private fun SectionLabel(text: String) {
 private fun AlbumTileWithArt(album: Album, fallbackColor: Color, onClick: () -> Unit) {
     Column(
         modifier = Modifier
+            .testTag("album-tile-${album.id}")
             .background(MonoTokens.Panel)
             .clickable(onClick = onClick),
     ) {
