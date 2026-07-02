@@ -1140,20 +1140,55 @@ private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
 
 @Composable
 private fun InteractiveVolume(volume: Float, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
+    var pressActive by remember { mutableStateOf(false) }
+    var dragActive by remember { mutableStateOf(false) }
+    val isAdjusting = pressActive || dragActive
+    val barHeight by animateDpAsState(
+        targetValue = if (isAdjusting) 18.dp else 8.dp,
+        animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing),
+        label = "volumeBarHeight",
+    )
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(44.dp)
             .pointerInput(Unit) {
-                detectTapGestures { offset -> onChange(horizontalFraction(offset.x, size.width.toFloat())) }
+                detectTapGestures(
+                    onPress = { offset ->
+                        pressActive = true
+                        onChange(horizontalFraction(offset.x, size.width.toFloat()))
+                        tryAwaitRelease()
+                        pressActive = false
+                    },
+                )
             }
             .pointerInput(Unit) {
-                detectDragGestures { change, _ -> onChange(horizontalFraction(change.position.x, size.width.toFloat())) }
-            }
-            .padding(vertical = 18.dp),
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        dragActive = true
+                        onChange(horizontalFraction(offset.x, size.width.toFloat()))
+                    },
+                    onDragEnd = { dragActive = false },
+                    onDragCancel = { dragActive = false },
+                ) { change, _ ->
+                    onChange(horizontalFraction(change.position.x, size.width.toFloat()))
+                }
+            },
+        contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.fillMaxSize().background(MonoTokens.Line))
-        Box(Modifier.fillMaxWidth(volume.coerceIn(0f, 1f)).fillMaxHeight().background(MonoTokens.Ink))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(barHeight)
+                .background(MonoTokens.Line),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(volume.coerceIn(0f, 1f))
+                .height(barHeight)
+                .align(Alignment.CenterStart)
+                .background(MonoTokens.Ink),
+        )
     }
 }
 
