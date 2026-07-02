@@ -1,0 +1,48 @@
+# Gradle and Android build outputs
+.gradle/
+.kotlin/
+build/
+**/build/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Local Android SDK configuration
+local.properties
+
+# Build artifacts
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# Signing keys and secrets
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+.env
+.env.*
+secrets.properties
+*.secret
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Local generation/verification artifacts
+artifacts/
+captures/
+screenshots/
+
+# Local implementation prompt/design handoff and agent audit trail
+prompt/
+details/
+docs/audit-log.md
