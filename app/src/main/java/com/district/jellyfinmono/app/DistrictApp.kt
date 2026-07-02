@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -1149,7 +1150,8 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions) {
 
 @Composable
 private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
-    BoxWithConstraints(
+    val clamped = fraction.coerceIn(0f, 1f)
+    Canvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
@@ -1159,32 +1161,34 @@ private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
             }
             .pointerInput(Unit) {
                 detectDragGestures { change, _ -> onChange(horizontalFraction(change.position.x, size.width.toFloat())) }
-            }
-            .padding(1.dp),
+            },
     ) {
-        Row(Modifier.fillMaxSize()) {
-            repeat(24) { index ->
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .background(if (index % 4 == 0) MonoTokens.Line2 else MonoTokens.Panel2),
-                )
-            }
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(maxWidth * fraction.coerceIn(0f, 1f))
-                .background(MonoTokens.Accent.copy(alpha = 0.22f)),
+        val w = size.width
+        val h = size.height
+        // Smooth warm fill for the played portion — no per-segment blocks.
+        drawRect(
+            color = MonoTokens.Accent.copy(alpha = 0.30f),
+            size = Size(w * clamped, h),
         )
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .padding(start = (maxWidth * fraction.coerceIn(0f, 1f) - 1.dp).coerceAtLeast(0.dp))
-                .width(2.dp)
-                .fillMaxHeight()
-                .background(MonoTokens.Ink),
+        // Thin, subtle tick divisions; every fourth reads slightly stronger.
+        val divisions = 24
+        for (i in 1 until divisions) {
+            val x = w * i / divisions
+            val major = i % 4 == 0
+            drawLine(
+                color = MonoTokens.Line2.copy(alpha = if (major) 0.7f else 0.35f),
+                start = Offset(x, 0f),
+                end = Offset(x, h),
+                strokeWidth = 1f,
+            )
+        }
+        // Bright playhead at the current position.
+        val playhead = (w * clamped).coerceIn(0f, w)
+        drawLine(
+            color = MonoTokens.Ink,
+            start = Offset(playhead, 0f),
+            end = Offset(playhead, h),
+            strokeWidth = 2.dp.toPx(),
         )
     }
 }
