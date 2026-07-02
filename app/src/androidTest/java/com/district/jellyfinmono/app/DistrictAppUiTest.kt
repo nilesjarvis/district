@@ -173,6 +173,35 @@ class DistrictAppUiTest {
     }
 
     @Test
+    fun pausedTrackCollapsesControlZoneAndNowPlayingCanResume() {
+        val track = track()
+        var playPauseCalls = 0
+        compose.setContent {
+            DistrictAppContent(
+                AppUiState.Library(
+                    LibraryUiState(
+                        session = session(),
+                        playerState = PlayerState(
+                            queue = listOf(track),
+                            currentTrack = track,
+                            isPlaying = false,
+                            durationMs = track.durationMs,
+                        ),
+                    ),
+                ),
+                actions = AppActions(playPause = { playPauseCalls += 1 }),
+            )
+        }
+
+        compose.onNodeWithText("PAUSE - NOW").assertIsDisplayed()
+        compose.onNodeWithText("CONTROL / SCRUB").assertDoesNotExist()
+
+        compose.onNodeWithTag("now-playing-bar").performClick()
+
+        assertEquals(1, playPauseCalls)
+    }
+
+    @Test
     fun searchSwipeRightGestureReturnsToLibrary() {
         var route by mutableStateOf(LibraryRoute.Search)
         compose.setContent {
@@ -205,6 +234,7 @@ class DistrictAppUiTest {
                         playerState = PlayerState(
                             queue = listOf(track),
                             currentTrack = track,
+                            isPlaying = true,
                             durationMs = track.durationMs,
                         ),
                     ),

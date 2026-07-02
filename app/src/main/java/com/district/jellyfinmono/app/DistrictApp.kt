@@ -502,6 +502,7 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
     val targetControlZoneHeight = when {
         state.route == LibraryRoute.Search -> 0.dp
         state.playerState.currentTrack == null -> 0.dp
+        !state.playerState.isPlaying -> 0.dp
         else -> ShellMetrics.ControlZoneHeight
     }
     val controlZoneHeight by animateDpAsState(
@@ -521,7 +522,7 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
                 LibraryRoute.AlbumDetail -> AlbumDetailRegion(state, actions)
             }
         },
-        nowPlaying = { NowPlayingFromState(state.playerState) },
+        nowPlaying = { NowPlayingFromState(state.playerState, actions) },
         controlZone = { PlayerControlZone(state.playerState, actions) },
         controlZoneHeight = controlZoneHeight,
     )
@@ -1023,7 +1024,7 @@ private fun Modifier.searchAutofocus(): Modifier {
 }
 
 @Composable
-private fun NowPlayingFromState(playerState: PlayerState) {
+private fun NowPlayingFromState(playerState: PlayerState, actions: AppActions) {
     val track = playerState.currentTrack
     val error = playerState.errorMessage?.takeIf { it.isNotBlank() }
     val context = LocalContext.current
@@ -1060,6 +1061,9 @@ private fun NowPlayingFromState(playerState: PlayerState) {
         duration = playerState.durationMs.formatDuration(),
         coverColor = sampledTint,
         tintColor = sampledTint,
+        modifier = Modifier
+            .testTag("now-playing-bar")
+            .clickable(enabled = track != null && error == null, onClick = actions.playPause),
         cover = coverResource?.let { resource ->
             {
                 AsyncImage(
