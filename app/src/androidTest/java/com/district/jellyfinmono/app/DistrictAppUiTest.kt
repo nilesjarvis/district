@@ -2,12 +2,18 @@ package com.district.jellyfinmono.app
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.unit.dp
 import com.district.jellyfinmono.domain.Album
 import com.district.jellyfinmono.domain.AuthSession
@@ -64,20 +70,49 @@ class DistrictAppUiTest {
 
     @Test
     fun searchKeepsNowPlayingVisibleAndRemovesControlZoneForKeyboardSpace() {
+        var route by mutableStateOf(LibraryRoute.Search)
         compose.setContent {
             DistrictAppContent(
                 AppUiState.Library(
                     LibraryUiState(
                         session = session(),
-                        route = LibraryRoute.Search,
+                        route = route,
                     ),
                 ),
+                actions = AppActions(backToLibrary = { route = LibraryRoute.Albums }),
             )
         }
 
+        compose.onNodeWithText("BACK").assertIsDisplayed()
         compose.onNodeWithText("IDLE - NOW").assertIsDisplayed()
         compose.onNodeWithText("RECENT").assertIsDisplayed()
         compose.onNodeWithText("CONTROL / SCRUB").assertDoesNotExist()
+
+        compose.onNodeWithText("BACK").performClick()
+
+        compose.onNodeWithText("SEARCH LIBRARY").assertIsDisplayed()
+    }
+
+    @Test
+    fun searchSwipeRightGestureReturnsToLibrary() {
+        var route by mutableStateOf(LibraryRoute.Search)
+        compose.setContent {
+            DistrictAppContent(
+                AppUiState.Library(
+                    LibraryUiState(
+                        session = session(),
+                        route = route,
+                    ),
+                ),
+                actions = AppActions(backToLibrary = { route = LibraryRoute.Albums }),
+            )
+        }
+
+        compose.onNodeWithTag("search-results-region").performTouchInput {
+            swipeRight()
+        }
+
+        compose.onNodeWithText("SEARCH LIBRARY").assertIsDisplayed()
     }
 
     @Test

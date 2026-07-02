@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.Text
@@ -517,18 +518,35 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
 @Composable
 private fun LibraryContextBar(state: LibraryUiState, actions: AppActions) {
     when (state.route) {
-        LibraryRoute.Search -> BasicTextField(
-            value = state.searchQuery,
-            onValueChange = actions.updateSearchQuery,
-            singleLine = true,
-            textStyle = TextStyle(color = MonoTokens.Ink, fontFamily = JetBrainsMono, fontSize = 13.sp),
+        LibraryRoute.Search -> Row(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MonoTokens.Panel)
                 .border(1.dp, MonoTokens.Accent)
-                .searchAutofocus()
-                .padding(horizontal = 10.dp, vertical = 16.dp),
-        )
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(62.dp)
+                    .clickable(onClick = actions.backToLibrary),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                UpperLabel("BACK", color = MonoTokens.Ink)
+            }
+            BasicTextField(
+                value = state.searchQuery,
+                onValueChange = actions.updateSearchQuery,
+                singleLine = true,
+                textStyle = TextStyle(color = MonoTokens.Ink, fontFamily = JetBrainsMono, fontSize = 13.sp),
+                modifier = Modifier
+                    .weight(1f)
+                    .searchAutofocus()
+                    .padding(vertical = 16.dp),
+            )
+            UpperLabel("SEARCH", color = MonoTokens.Mut2)
+        }
         LibraryRoute.AlbumDetail -> Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -615,6 +633,27 @@ private fun SearchResultsRegion(state: LibraryUiState, actions: AppActions) {
         columns = GridCells.Fixed(2),
         modifier = Modifier
             .fillMaxSize()
+            .testTag("search-results-region")
+            .pointerInput(actions.backToLibrary) {
+                var totalDrag = 0f
+                var triggered = false
+                val threshold = 72.dp.toPx()
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        totalDrag = 0f
+                        triggered = false
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        if (triggered) return@detectHorizontalDragGestures
+                        totalDrag += dragAmount
+                        if (totalDrag > threshold) {
+                            triggered = true
+                            change.consume()
+                            actions.backToLibrary()
+                        }
+                    },
+                )
+            }
             .background(MonoTokens.Line)
             .border(1.dp, MonoTokens.Line),
         horizontalArrangement = Arrangement.spacedBy(1.dp),
