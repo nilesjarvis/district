@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -92,7 +93,27 @@ class DistrictAppUiTest {
 
         compose.onNodeWithText("BACK").performClick()
 
-        compose.onNodeWithText("SEARCH LIBRARY").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Search library").assertIsDisplayed()
+    }
+
+    @Test
+    fun librarySearchIconOpensSearch() {
+        var route by mutableStateOf(LibraryRoute.Albums)
+        compose.setContent {
+            DistrictAppContent(
+                AppUiState.Library(
+                    LibraryUiState(
+                        session = session(),
+                        route = route,
+                    ),
+                ),
+                actions = AppActions(activateSearch = { route = LibraryRoute.Search }),
+            )
+        }
+
+        compose.onNodeWithContentDescription("Search library").performClick()
+
+        compose.onNodeWithText("BACK").assertIsDisplayed()
     }
 
     @Test
@@ -128,7 +149,7 @@ class DistrictAppUiTest {
             swipeRight()
         }
 
-        compose.onNodeWithText("SEARCH LIBRARY").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Search library").assertIsDisplayed()
     }
 
     @Test

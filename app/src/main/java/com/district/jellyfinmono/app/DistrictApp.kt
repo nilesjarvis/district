@@ -4,6 +4,7 @@ import android.graphics.drawable.BitmapDrawable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,11 +46,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -502,20 +508,9 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
     )
     MonoShell(
         header = {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                UpperLabel(if (state.route == LibraryRoute.AlbumDetail) "< ALBUM" else "JELLYFIN|LIB", color = MonoTokens.Ink)
-                Spacer(Modifier.weight(1f))
-                UpperLabel(if (state.error == null) "SRV:OK" else "SRV:ERR", color = if (state.error == null) MonoTokens.Ok else MonoTokens.Accent)
-            }
+            LibraryTopBar(state, actions)
         },
-        contextualBar = {
-            LibraryContextBar(state, actions)
-        },
+        contextualBar = null,
         scrollRegion = {
             when (state.route) {
                 LibraryRoute.Albums -> LibraryAlbumGrid(state, actions)
@@ -530,7 +525,7 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
 }
 
 @Composable
-private fun LibraryContextBar(state: LibraryUiState, actions: AppActions) {
+private fun LibraryTopBar(state: LibraryUiState, actions: AppActions) {
     when (state.route) {
         LibraryRoute.Search -> Row(
             modifier = Modifier
@@ -557,9 +552,9 @@ private fun LibraryContextBar(state: LibraryUiState, actions: AppActions) {
                 modifier = Modifier
                     .weight(1f)
                     .searchAutofocus()
-                    .padding(vertical = 16.dp),
+                    .padding(vertical = 13.dp),
             )
-            UpperLabel("SEARCH", color = MonoTokens.Mut2)
+            SearchGlyph(color = MonoTokens.Mut2)
         }
         LibraryRoute.AlbumDetail -> Row(
             modifier = Modifier
@@ -568,22 +563,59 @@ private fun LibraryContextBar(state: LibraryUiState, actions: AppActions) {
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            UpperLabel("RECENT - ALBUM", color = MonoTokens.Mut)
+            UpperLabel("< ALBUM", color = MonoTokens.Ink)
             Spacer(Modifier.weight(1f))
             UpperLabel("BACK", color = MonoTokens.Mut2)
         }
         LibraryRoute.Albums -> Row(
             modifier = Modifier
                 .fillMaxSize()
-                .border(1.dp, MonoTokens.Accent)
-                .clickable(onClick = actions.activateSearch)
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            UpperLabel("SEARCH LIBRARY", color = MonoTokens.Mut)
+            UpperLabel("JELLYFIN|LIB", color = MonoTokens.Ink)
             Spacer(Modifier.weight(1f))
-            UpperLabel("TAP", color = MonoTokens.Mut2)
+            SearchIconButton(onClick = actions.activateSearch)
         }
+    }
+}
+
+@Composable
+private fun SearchIconButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(46.dp)
+            .semantics { contentDescription = "Search library" }
+            .testTag("search-library-action")
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        SearchGlyph(color = MonoTokens.Ink)
+    }
+}
+
+@Composable
+private fun SearchGlyph(color: Color) {
+    Canvas(
+        modifier = Modifier
+            .width(18.dp)
+            .height(18.dp),
+    ) {
+        val strokeWidth = 2.dp.toPx()
+        drawCircle(
+            color = color,
+            radius = size.minDimension * 0.32f,
+            center = Offset(size.width * 0.43f, size.height * 0.43f),
+            style = Stroke(width = strokeWidth),
+        )
+        drawLine(
+            color = color,
+            start = Offset(size.width * 0.64f, size.height * 0.64f),
+            end = Offset(size.width * 0.86f, size.height * 0.86f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Square,
+        )
     }
 }
 
