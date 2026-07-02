@@ -768,7 +768,7 @@ private fun AlbumDetailRegion(state: LibraryUiState, actions: AppActions) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
+                        .aspectRatio(1f)
                         .background(MonoTokens.Panel)
                         .padding(12.dp),
                     verticalArrangement = Arrangement.Center,
