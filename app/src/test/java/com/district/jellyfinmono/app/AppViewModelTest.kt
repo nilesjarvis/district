@@ -1,9 +1,5 @@
 package com.district.jellyfinmono.app
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.viewmodel.CreationExtras
 import com.district.jellyfinmono.core.network.TestDispatcherProvider
 import com.district.jellyfinmono.core.media.PlaybackController
 import com.district.jellyfinmono.core.media.PlayerState
@@ -439,25 +435,43 @@ class AppViewModelTest {
     }
 
     @Test
-    fun clearingViewModelReleasesPlaybackController() = runTest {
+    fun playTrackNotInQueueFallsBackToSingleTrackQueue() = runTest {
+        val album = Album("album-1", "Ghost Notes", "Molyneux", 2024, 2, null)
+        val first = Track("track-1", "First", "Molyneux", "album-1", 1, 200000L, null)
+        val other = Track("track-9", "Elsewhere", "Molyneux", "album-2", 1, 180000L, null)
         val playbackController = FakePlaybackController()
-        val viewModel = viewModel(playbackController = playbackController)
-        val store = ViewModelStore()
-        val provider = ViewModelProvider(
-            store,
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T = viewModel as T
-
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T = viewModel as T
-            },
+        val viewModel = viewModel(
+            repository = FakeRepository(tracksResult = DistrictResult.Success(listOf(first))),
+            playbackController = playbackController,
         )
 
-        provider[AppViewModel::class.java]
-        store.clear()
+        viewModel.connectServer()
+        viewModel.checkServer()
+        viewModel.signIn()
+        viewModel.enterLibrary()
+        viewModel.openAlbum(album)
+        viewModel.playTrack(other)
 
-        assertTrue(playbackController.released)
+        assertEquals(listOf("track-9"), playbackController.lastQueue.map { it.id })
+        assertEquals(0, playbackController.lastStartIndex)
+    }
+
+    @Test
+    fun streamAuthErrorClearsSessionAndReturnsToSignIn() = runTest {
+        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val sessionStore = InMemorySessionStore(session)
+        val playbackController = FakePlaybackController()
+        val viewModel = viewModel(
+            sessionStore = sessionStore,
+            playbackController = playbackController,
+        )
+
+        playbackController.emit(PlayerState(isAuthError = true, errorMessage = "Session expired"))
+
+        val state = viewModel.uiState.value as AppUiState.Onboarding
+        assertEquals(OnboardingStep.SignIn, state.state.step)
+        assertEquals(DistrictError.ExpiredToken, state.state.error)
+        assertEquals(null, sessionStore.load())
     }
 
     @Test
@@ -635,7 +649,6 @@ class AppViewModelTest {
         var lastStartIndex: Int = -1
         var lastPositionMs: Long = -1L
         var lastPlayWhenReady: Boolean = true
-        var released: Boolean = false
 
         fun emit(playerState: PlayerState) {
             mutableState.value = playerState
@@ -653,8 +666,6 @@ class AppViewModelTest {
         override fun previous() {}
         override fun seekToFraction(fraction: Float) {}
         override fun setVolumeFraction(fraction: Float) {}
-        override fun release() {
-            released = true
-        }
+        override fun release() {}
     }
 }

@@ -7,7 +7,7 @@ District is a native Android music client for Jellyfin, built with Kotlin, Jetpa
 - Jellyfin server reachability check and username/password authentication.
 - Secure session storage with Android Keystore-backed encryption.
 - Music library loading, two-column album grid, authenticated cover art, album detail, and live search.
-- Media3/ExoPlayer playback using authenticated Jellyfin stream URLs.
+- Media3/ExoPlayer playback using authenticated Jellyfin stream URLs, hosted in a foreground `MediaSessionService` with audio focus, headphone-unplug pausing, and lock-screen/notification controls.
 - Persistent playback queue, current track, and position restore.
 - Ticked scrub ruler, previous/play-next tap zones, volume bar, haptic detents, and now-playing error/tint state.
 - Error/loading/empty states for onboarding, library, search, album detail, playback, session expiry, and persistence failures.

@@ -11,6 +11,7 @@ data class PlayerState(
     val durationMs: Long = 0L,
     val volume: Float = 1f,
     val errorMessage: String? = null,
+    val isAuthError: Boolean = false,
 )
 
 interface PlaybackController {

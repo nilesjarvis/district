@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -45,7 +46,11 @@ class AppViewModel(
         viewModelScope.launch(dispatchers.main) {
             playbackController.state.collectLatest { playerState ->
                 updateLibrary { copy(playerState = playerState) }
-                persistPlayback(playerState)
+                if (playerState.isAuthError) {
+                    libraryState()?.let { handleExpiredSession(it.session) }
+                } else {
+                    persistPlayback(playerState)
+                }
             }
         }
         viewModelScope.launch(dispatchers.io) {
@@ -209,8 +214,12 @@ class AppViewModel(
     fun playTrack(track: Track) {
         val state = libraryState() ?: return
         val queue = if (state.albumTracks.isNotEmpty()) state.albumTracks else state.searchResults.tracks
-        val index = queue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
-        playbackController.playQueue(queue, index)
+        val index = queue.indexOfFirst { it.id == track.id }
+        if (index >= 0) {
+            playbackController.playQueue(queue, index)
+        } else {
+            playbackController.playQueue(listOf(track), 0)
+        }
     }
 
     fun playPause() = playbackController.playPause()
@@ -218,11 +227,6 @@ class AppViewModel(
     fun previousTrack() = playbackController.previous()
     fun seekToFraction(fraction: Float) = playbackController.seekToFraction(fraction)
     fun setVolumeFraction(fraction: Float) = playbackController.setVolumeFraction(fraction)
-
-    override fun onCleared() {
-        playbackController.release()
-        super.onCleared()
-    }
 
     private suspend fun handleAuthenticated(session: AuthSession) {
         when (val libraries = repository.libraries(session)) {
@@ -354,12 +358,14 @@ class AppViewModel(
             updatedAtEpochMs = clockMs(),
         )
         if (!shouldPersist(snapshot, lastPersistedPlayback)) return
-        runCatching {
+        try {
             withContext(dispatchers.io) {
                 playbackStore.save(snapshot)
             }
-        }.onSuccess {
             lastPersistedPlayback = snapshot
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
         }
     }
 
