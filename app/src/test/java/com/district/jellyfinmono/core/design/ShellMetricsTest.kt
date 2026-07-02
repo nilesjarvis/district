@@ -10,7 +10,6 @@ class ShellMetricsTest {
         assertEquals(46f, ShellMetrics.HeaderHeight.value)
         assertEquals(52f, ShellMetrics.ContextBarHeight.value)
         assertEquals(56f, ShellMetrics.NowPlayingHeight.value)
-        assertEquals(2f, ShellMetrics.DividerHeight.value)
         assertTrue(ShellMetrics.ControlZoneHeight.value >= 232f)
         assertTrue(ShellMetrics.MinTouchTarget.value >= 44f)
     }

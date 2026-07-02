@@ -26,7 +26,6 @@ object ShellMetrics {
     val HeaderHeight: Dp = 46.dp
     val ContextBarHeight: Dp = 52.dp
     val NowPlayingHeight: Dp = 56.dp
-    val DividerHeight: Dp = 2.dp
     val ControlZoneHeight: Dp = 280.dp
     val MinTouchTarget: Dp = 44.dp
 }
@@ -85,12 +84,6 @@ fun MonoShell(
             nowPlaying()
         }
         if (controlZoneHeight > 0.dp) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(ShellMetrics.DividerHeight)
-                    .background(MonoTokens.Ink),
-            )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
