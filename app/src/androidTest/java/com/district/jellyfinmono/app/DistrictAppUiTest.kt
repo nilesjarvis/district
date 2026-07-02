@@ -15,8 +15,10 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.unit.dp
+import com.district.jellyfinmono.core.media.PlayerState
 import com.district.jellyfinmono.domain.Album
 import com.district.jellyfinmono.domain.AuthSession
+import com.district.jellyfinmono.domain.Track
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -94,6 +96,20 @@ class DistrictAppUiTest {
     }
 
     @Test
+    fun idleLibraryKeepsNowPlayingVisibleAndCollapsesControlZone() {
+        compose.setContent {
+            DistrictAppContent(
+                AppUiState.Library(
+                    LibraryUiState(session = session()),
+                ),
+            )
+        }
+
+        compose.onNodeWithText("IDLE - NOW").assertIsDisplayed()
+        compose.onNodeWithText("CONTROL / SCRUB").assertDoesNotExist()
+    }
+
+    @Test
     fun searchSwipeRightGestureReturnsToLibrary() {
         var route by mutableStateOf(LibraryRoute.Search)
         compose.setContent {
@@ -117,10 +133,18 @@ class DistrictAppUiTest {
 
     @Test
     fun bottomControlZonesMeetMinimumTouchTarget() {
+        val track = track()
         compose.setContent {
             DistrictAppContent(
                 AppUiState.Library(
-                    LibraryUiState(session = session()),
+                    LibraryUiState(
+                        session = session(),
+                        playerState = PlayerState(
+                            queue = listOf(track),
+                            currentTrack = track,
+                            durationMs = track.durationMs,
+                        ),
+                    ),
                 ),
             )
         }
@@ -141,5 +165,16 @@ class DistrictAppUiTest {
             userId = "user",
             username = "marcus",
             deviceId = "device",
+        )
+
+    private fun track() =
+        Track(
+            id = "track-1",
+            title = "First Track",
+            artist = "District",
+            albumId = "album-1",
+            indexNumber = 1,
+            durationMs = 180_000L,
+            stream = null,
         )
 }

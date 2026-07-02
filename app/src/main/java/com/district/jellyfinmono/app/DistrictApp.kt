@@ -1,6 +1,9 @@
 package com.district.jellyfinmono.app
 
 import android.graphics.drawable.BitmapDrawable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -78,6 +81,7 @@ import com.district.jellyfinmono.core.design.MonoStatusDot
 import com.district.jellyfinmono.core.design.MonoTokens
 import com.district.jellyfinmono.core.design.MonoTrackRow
 import com.district.jellyfinmono.core.design.MonoVolumeBar
+import com.district.jellyfinmono.core.design.ShellMetrics
 import com.district.jellyfinmono.core.design.UpperLabel
 import com.district.jellyfinmono.domain.Album
 import com.district.jellyfinmono.domain.DistrictError
@@ -486,6 +490,16 @@ private fun StepButtons(left: String, onLeft: () -> Unit, right: String, onRight
 @Composable
 private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppActions()) {
     BackHandler(enabled = state.route != LibraryRoute.Albums, onBack = actions.backToLibrary)
+    val targetControlZoneHeight = when {
+        state.route == LibraryRoute.Search -> 0.dp
+        state.playerState.currentTrack == null -> 0.dp
+        else -> ShellMetrics.ControlZoneHeight
+    }
+    val controlZoneHeight by animateDpAsState(
+        targetValue = targetControlZoneHeight,
+        animationSpec = tween(durationMillis = 170, easing = FastOutSlowInEasing),
+        label = "controlZoneHeight",
+    )
     MonoShell(
         header = {
             Row(
@@ -511,7 +525,7 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
         },
         nowPlaying = { NowPlayingFromState(state.playerState) },
         controlZone = { PlayerControlZone(state.playerState, actions) },
-        controlZoneHeight = if (state.route == LibraryRoute.Search) 0.dp else com.district.jellyfinmono.core.design.ShellMetrics.ControlZoneHeight,
+        controlZoneHeight = controlZoneHeight,
     )
 }
 
