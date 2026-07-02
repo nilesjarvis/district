@@ -1432,7 +1432,7 @@ private fun LibraryPixel9Preview() {
     DistrictTheme {
         LibraryScreen(
             LibraryUiState(
-                session = com.district.jellyfinmono.domain.AuthSession("http://preview", "token", "user", "marcus", "device"),
+                session = com.district.jellyfinmono.domain.AuthSession("http://preview", "token", "user", "demo", "device"),
                 albums = listOf(
                     Album("1", "Slow Structures", "A. Molyneux", 2024, 10, null),
                     Album("2", "Ghost Notes", "Molyneux", 2024, 9, null),

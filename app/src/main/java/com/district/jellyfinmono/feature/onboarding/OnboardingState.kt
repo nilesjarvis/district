@@ -13,10 +13,10 @@ enum class OnboardingStep {
 
 data class OnboardingUiState(
     val step: OnboardingStep = OnboardingStep.Welcome,
-    val serverAddress: String = "192.168.178.32",
+    val serverAddress: String = "",
     val port: String = "8096",
     val protocol: String = "http",
-    val username: String = "marcus",
+    val username: String = "",
     val password: String = "",
     val showPassword: Boolean = false,
     val rememberDevice: Boolean = true,

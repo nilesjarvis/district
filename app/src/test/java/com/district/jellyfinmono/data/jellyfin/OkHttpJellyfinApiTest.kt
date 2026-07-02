@@ -48,9 +48,9 @@ class OkHttpJellyfinApiTest {
 
     @Test
     fun authenticatePostsCredentialsAndDoesNotExposeTokenInToString() = runTest {
-        server.enqueue(json("""{"AccessToken":"secret-token","User":{"Id":"user-1","Name":"marcus"}}"""))
+        server.enqueue(json("""{"AccessToken":"secret-token","User":{"Id":"user-1","Name":"demo"}}"""))
 
-        val session = api.authenticate(server.url("/").toString(), "marcus", "password", "device-1")
+        val session = api.authenticate(server.url("/").toString(), "demo", "password", "device-1")
 
         val request = server.takeRequest()
         assertEquals("/Users/AuthenticateByName", request.path)
@@ -166,7 +166,7 @@ class OkHttpJellyfinApiTest {
             serverUrl = server.url("/").toString().trimEnd('/'),
             accessToken = "token",
             userId = "user-1",
-            username = "marcus",
+            username = "demo",
             deviceId = "device-1",
         )
 

@@ -11,7 +11,7 @@ class InMemoryStoresTest {
     @Test
     fun sessionStoreSavesAndClearsSession() = runTest {
         val store = InMemorySessionStore()
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
 
         store.save(session)
         assertEquals(session, store.load())

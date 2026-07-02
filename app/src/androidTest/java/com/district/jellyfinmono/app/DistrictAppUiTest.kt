@@ -338,7 +338,7 @@ class DistrictAppUiTest {
             serverUrl = "http://preview",
             accessToken = "token",
             userId = "user",
-            username = "marcus",
+            username = "demo",
             deviceId = "device",
         )
 

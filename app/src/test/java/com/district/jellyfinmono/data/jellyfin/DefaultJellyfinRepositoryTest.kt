@@ -16,7 +16,7 @@ class DefaultJellyfinRepositoryTest {
         val api = RecordingApi()
         val repository = DefaultJellyfinRepository(api, FixedDeviceIdProvider("fixed-device"))
 
-        val result = repository.authenticate("http://server", "marcus", "pw")
+        val result = repository.authenticate("http://server", "demo", "pw")
 
         assertTrue(result is DistrictResult.Success)
         assertEquals("fixed-device", api.deviceId)
@@ -35,7 +35,7 @@ class DefaultJellyfinRepositoryTest {
     fun mapsAuthenticateUnauthorizedToRejectedCredentials() = runTest {
         val repository = DefaultJellyfinRepository(RecordingApi(failWith = JellyfinHttpException(401, "bad credentials")), FixedDeviceIdProvider("id"))
 
-        val result = repository.authenticate("http://server", "marcus", "wrong")
+        val result = repository.authenticate("http://server", "demo", "wrong")
 
         assertEquals(DistrictResult.Failure(DistrictError.AuthRejected), result)
     }

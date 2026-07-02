@@ -48,12 +48,13 @@ class AppViewModelTest {
         val viewModel = viewModel(repository)
 
         viewModel.connectServer()
+        viewModel.updateServerAddress("192.168.1.50")
         viewModel.checkServer()
 
         val state = viewModel.uiState.value as AppUiState.Onboarding
         assertEquals(OnboardingStep.SignIn, state.state.step)
         assertEquals("10.9.6", state.state.serverInfo!!.version)
-        assertEquals("http://192.168.178.32:8096", repository.checkedUrl)
+        assertEquals("http://192.168.1.50:8096", repository.checkedUrl)
     }
 
     @Test
@@ -73,7 +74,7 @@ class AppViewModelTest {
     @Test
     fun signInSuccessLoadsLibrariesAndPersistsSession() = runTest {
         val sessionStore = InMemorySessionStore()
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val repository = FakeRepository(authResult = DistrictResult.Success(session))
         val viewModel = viewModel(repository, sessionStore)
 
@@ -95,7 +96,7 @@ class AppViewModelTest {
 
     @Test
     fun secureSessionSaveFailureStopsSignInWithStorageError() = runTest {
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val viewModel = viewModel(
             repository = FakeRepository(authResult = DistrictResult.Success(session)),
             sessionStore = ThrowingSessionStore(),
@@ -114,7 +115,7 @@ class AppViewModelTest {
     @Test
     fun failedLibraryLoadDoesNotPersistSession() = runTest {
         val sessionStore = InMemorySessionStore()
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val repository = FakeRepository(
             authResult = DistrictResult.Success(session),
             libraryResult = DistrictResult.Failure(DistrictError.Network("down")),
@@ -149,7 +150,7 @@ class AppViewModelTest {
 
     @Test
     fun restoresPersistedSessionToLibrary() = runTest {
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val viewModel = viewModel(sessionStore = InMemorySessionStore(session))
 
         assertEquals(session, (viewModel.uiState.value as AppUiState.Library).state.session)
@@ -157,7 +158,7 @@ class AppViewModelTest {
 
     @Test
     fun expiredPersistedSessionIsClearedAndReturnsToSignIn() = runTest {
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val sessionStore = InMemorySessionStore(session)
         val viewModel = viewModel(
             repository = FakeRepository(libraryResult = DistrictResult.Failure(DistrictError.ExpiredToken)),
@@ -167,7 +168,7 @@ class AppViewModelTest {
         val state = viewModel.uiState.value as AppUiState.Onboarding
         assertEquals(OnboardingStep.SignIn, state.state.step)
         assertEquals("http://server", state.state.serverAddress)
-        assertEquals("marcus", state.state.username)
+        assertEquals("demo", state.state.username)
         assertEquals(DistrictError.ExpiredToken, state.state.error)
         assertEquals(null, sessionStore.load())
     }
@@ -216,7 +217,7 @@ class AppViewModelTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun searchDebouncesLiveQueries() = runTest {
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val repository = FakeRepository(
             searchResult = DistrictResult.Success(
                 SearchResults(
@@ -253,7 +254,7 @@ class AppViewModelTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun searchFailureStopsLoadingAndSurfacesError() = runTest {
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val dispatcher = StandardTestDispatcher(testScheduler)
         val viewModel = viewModel(
             repository = FakeRepository(searchResult = DistrictResult.Failure(DistrictError.Network("search down"))),
@@ -276,7 +277,7 @@ class AppViewModelTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun searchFailureAfterSuccessClearsStaleResults() = runTest {
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val repository = FakeRepository(
             searchResult = DistrictResult.Success(
                 SearchResults(
@@ -311,7 +312,7 @@ class AppViewModelTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun expiredTokenDuringSearchClearsSessionAndReturnsToSignIn() = runTest {
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val sessionStore = InMemorySessionStore(session)
         val dispatcher = StandardTestDispatcher(testScheduler)
         val viewModel = viewModel(
@@ -336,7 +337,7 @@ class AppViewModelTest {
     @Test
     fun albumOpenedFromSearchReturnsToSearchResults() = runTest {
         val album = Album("album-1", "Ghost Notes", "Molyneux", 2024, 3, null)
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val repository = FakeRepository(
             searchResult = DistrictResult.Success(SearchResults(listOf(album), emptyList(), emptyList())),
         )
@@ -411,7 +412,7 @@ class AppViewModelTest {
     fun playTrackFromSearchUsesSearchTrackQueueAndTappedIndex() = runTest {
         val first = Track("track-1", "First", "Molyneux", "album-1", 1, 200000L, null)
         val second = Track("track-2", "Second", "Molyneux", "album-1", 2, 220000L, null)
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val repository = FakeRepository(
             searchResult = DistrictResult.Success(SearchResults(emptyList(), listOf(first, second), emptyList())),
         )
@@ -459,7 +460,7 @@ class AppViewModelTest {
 
     @Test
     fun streamAuthErrorClearsSessionAndReturnsToSignIn() = runTest {
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val sessionStore = InMemorySessionStore(session)
         val playbackController = FakePlaybackController()
         val viewModel = viewModel(
@@ -501,7 +502,7 @@ class AppViewModelTest {
 
     @Test
     fun restoredPlaybackSnapshotResolvesTracksAndQueuesPausedAtSavedPosition() = runTest {
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val first = Track("track-1", "First", "Molyneux", "album-1", 1, 200000L, null)
         val second = Track("track-2", "Second", "Molyneux", "album-1", 2, 220000L, null)
         val playbackStore = InMemoryPlaybackStore(
@@ -530,7 +531,7 @@ class AppViewModelTest {
 
     @Test
     fun restoredPlaybackSnapshotClearsWhenCurrentTrackCannotBeResolved() = runTest {
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val playbackStore = InMemoryPlaybackStore(
             PlaybackSnapshot(
                 queueIds = listOf("track-1", "track-2"),
@@ -559,7 +560,7 @@ class AppViewModelTest {
 
     @Test
     fun restoredPlaybackSnapshotClearsWhenShapeIsInvalid() = runTest {
-        val session = AuthSession("http://server", "token", "user", "marcus", "device")
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
         val playbackStore = InMemoryPlaybackStore(
             PlaybackSnapshot(
                 queueIds = emptyList(),
@@ -656,8 +657,8 @@ class AppViewModelTest {
     )
 
     private class FakeRepository(
-        private val serverResult: DistrictResult<ServerInfo> = DistrictResult.Success(ServerInfo("http://192.168.178.32:8096", "LAN", "10.9.6")),
-        private val authResult: DistrictResult<AuthSession> = DistrictResult.Success(AuthSession("http://server", "token", "user", "marcus", "device")),
+        private val serverResult: DistrictResult<ServerInfo> = DistrictResult.Success(ServerInfo("http://192.168.1.50:8096", "LAN", "10.9.6")),
+        private val authResult: DistrictResult<AuthSession> = DistrictResult.Success(AuthSession("http://server", "token", "user", "demo", "device")),
         private val libraryResult: DistrictResult<List<MusicLibrary>> = DistrictResult.Success(listOf(MusicLibrary("music", "Music", "music"))),
         private val albumsResult: DistrictResult<List<Album>> = DistrictResult.Success(emptyList()),
         private val tracksResult: DistrictResult<List<Track>> = DistrictResult.Success(emptyList()),
