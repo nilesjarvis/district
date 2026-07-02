@@ -3,6 +3,7 @@ package com.district.jellyfinmono.data.jellyfin
 import com.district.jellyfinmono.core.network.TestDispatcherProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -10,6 +11,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -75,7 +77,14 @@ class OkHttpJellyfinApiTest {
         assertEquals("${session.serverUrl}/Items/album-1/Images/Primary?maxWidth=300", albums.single().coverArt!!.url)
         assertNotNull(albums.single().coverArt!!.authHeaders)
         assertEquals(302000L, tracks.single().durationMs)
-        assertEquals("${session.serverUrl}/Audio/track-1/universal", tracks.single().stream!!.url)
+        val streamUrl = tracks.single().stream!!.url.toHttpUrl()
+        assertEquals("/Audio/track-1/universal", streamUrl.encodedPath)
+        assertEquals("user-1", streamUrl.queryParameter("UserId"))
+        assertEquals("device-1", streamUrl.queryParameter("DeviceId"))
+        assertTrue(streamUrl.queryParameter("Container")!!.contains("flac"))
+        assertEquals("http", streamUrl.queryParameter("TranscodingProtocol"))
+        assertNull("Access token must not appear in the stream URL", streamUrl.queryParameter("api_key"))
+        assertFalse(tracks.single().stream!!.url.contains("token"))
         assertNotNull(tracks.single().stream!!.authHeaders)
         assertEquals(listOf("track-1", "track-2"), restoredTracks.map { it.id })
         assertEquals(3, results.totalCount)

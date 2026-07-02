@@ -104,7 +104,7 @@ class OkHttpJellyfinApi(
                 "SortBy" to "IndexNumber",
             ),
         )
-        json.items().map { it.toJellyfinItem().toTrack(session.serverUrl, session.authHeaders()) }
+        json.items().map { it.toJellyfinItem().toTrack(session, session.authHeaders()) }
     }
 
     override suspend fun tracksByIds(session: AuthSession, ids: List<String>) = withContext(dispatchers.io) {
@@ -119,7 +119,7 @@ class OkHttpJellyfinApi(
             ),
         )
         val byId = json.items()
-            .map { it.toJellyfinItem().toTrack(session.serverUrl, session.authHeaders()) }
+            .map { it.toJellyfinItem().toTrack(session, session.authHeaders()) }
             .associateBy { it.id }
         ids.mapNotNull { byId[it] }
     }
@@ -142,7 +142,7 @@ class OkHttpJellyfinApi(
             val item = itemJson.toJellyfinItem()
             when (item.type) {
                 "MusicAlbum" -> albums += item.toAlbum(session.serverUrl, session.authHeaders())
-                "Audio" -> tracks += item.toTrack(session.serverUrl, session.authHeaders())
+                "Audio" -> tracks += item.toTrack(session, session.authHeaders())
                 "MusicArtist" -> artists += Artist(id = item.id, name = item.name)
             }
         }
