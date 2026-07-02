@@ -222,7 +222,7 @@ class DistrictAppUiTest {
     }
 
     @Test
-    fun pausedTrackCollapsesControlZoneAndCoverCanResume() {
+    fun pausedTrackCollapsesControlZoneAndNowPlayingCanResume() {
         val track = track()
         var playPauseCalls = 0
         compose.setContent {
@@ -245,7 +245,7 @@ class DistrictAppUiTest {
         compose.onNodeWithText("PAUSE - NOW").assertIsDisplayed()
         compose.onNodeWithText("CONTROL / SCRUB").assertDoesNotExist()
 
-        compose.onNodeWithTag("now-playing-toggle").performClick()
+        compose.onNodeWithTag("now-playing-bar").performClick()
 
         assertEquals(1, playPauseCalls)
     }

@@ -35,6 +35,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -1184,8 +1187,8 @@ private fun NowPlayingFromState(playerState: PlayerState, actions: AppActions) {
         coverColor = sampledTint,
         tintColor = sampledTint,
         modifier = Modifier
-            .testTag("now-playing-bar"),
-        onTogglePlayback = if (track != null && error == null) actions.playPause else null,
+            .testTag("now-playing-bar")
+            .clickable(enabled = track != null && error == null, onClick = actions.playPause),
         cover = coverResource?.let { resource ->
             {
                 AsyncImage(
@@ -1284,10 +1287,35 @@ private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
             .testTag("playback-scrub-ruler")
             .background(MonoTokens.Line)
             .pointerInput(Unit) {
-                detectTapGestures { offset -> onChange(horizontalFraction(offset.x, size.width.toFloat())) }
-            }
-            .pointerInput(Unit) {
-                detectDragGestures { change, _ -> onChange(horizontalFraction(change.position.x, size.width.toFloat())) }
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val pointerId = down.id
+                    var latestPosition = down.position
+                    var totalDrag = Offset.Zero
+                    var isDragging = false
+
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                        latestPosition = change.position
+
+                        if (!change.pressed) break
+
+                        val delta = change.positionChange()
+                        totalDrag += delta
+                        if (!isDragging && totalDrag.getDistance() > viewConfiguration.touchSlop) {
+                            isDragging = true
+                        }
+                        if (isDragging) {
+                            change.consume()
+                            onChange(horizontalFraction(change.position.x, size.width.toFloat()))
+                        }
+                    }
+
+                    if (!isDragging) {
+                        onChange(horizontalFraction(latestPosition.x, size.width.toFloat()))
+                    }
+                }
             },
     ) {
         val w = size.width
