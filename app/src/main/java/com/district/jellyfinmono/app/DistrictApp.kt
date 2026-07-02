@@ -1055,6 +1055,21 @@ private fun NowPlayingFromState(playerState: PlayerState) {
         duration = playerState.durationMs.formatDuration(),
         coverColor = sampledTint,
         tintColor = sampledTint,
+        cover = coverResource?.let { resource ->
+            {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(resource.url)
+                        .apply {
+                            resource.authHeaders?.asMap()?.forEach { (name, value) -> addHeader(name, value) }
+                        }
+                        .build(),
+                    contentDescription = "${track?.title ?: "Current track"} cover",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        },
     )
 }
 

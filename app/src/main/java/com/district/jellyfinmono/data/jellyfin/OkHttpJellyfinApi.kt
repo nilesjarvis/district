@@ -104,7 +104,7 @@ class OkHttpJellyfinApi(
                 "SortBy" to "IndexNumber",
             ),
         )
-        json.items().map { it.toJellyfinItem().toTrack(session, session.authHeaders()) }
+        json.items().map { it.toJellyfinItem().toTrack(session, session.authHeaders(), albumIdOverride = albumId) }
     }
 
     override suspend fun tracksByIds(session: AuthSession, ids: List<String>) = withContext(dispatchers.io) {

@@ -66,7 +66,7 @@ class OkHttpJellyfinApiTest {
         server.enqueue(json("""{"Items":[{"Id":"album-1","Type":"MusicAlbum","Name":"Ghost Notes","AlbumArtist":"Molyneux","ProductionYear":2024,"ChildCount":3}]}"""))
         server.enqueue(json("""{"Items":[{"Id":"track-1","Type":"Audio","Name":"Second Person","Artists":["Molyneux"],"ParentId":"album-1","IndexNumber":2,"RunTimeTicks":3020000000}]}"""))
         server.enqueue(json("""{"Items":[{"Id":"track-2","Type":"Audio","Name":"First Person","Artists":["Molyneux"]},{"Id":"track-1","Type":"Audio","Name":"Second Person","Artists":["Molyneux"]}]}"""))
-        server.enqueue(json("""{"Items":[{"Id":"album-1","Type":"MusicAlbum","Name":"Ghost Notes","AlbumArtist":"Molyneux"},{"Id":"track-1","Type":"Audio","Name":"Second Person","Artists":["Molyneux"]},{"Id":"artist-1","Type":"MusicArtist","Name":"Molyneux"}]}"""))
+        server.enqueue(json("""{"Items":[{"Id":"album-1","Type":"MusicAlbum","Name":"Ghost Notes","AlbumArtist":"Molyneux"},{"Id":"track-1","Type":"Audio","Name":"Second Person","Artists":["Molyneux"],"AlbumId":"album-1"},{"Id":"artist-1","Type":"MusicArtist","Name":"Molyneux"}]}"""))
 
         val albums = api.albums(session)
         val tracks = api.albumTracks(session, "album-1")
@@ -77,6 +77,7 @@ class OkHttpJellyfinApiTest {
         assertEquals("${session.serverUrl}/Items/album-1/Images/Primary?maxWidth=300", albums.single().coverArt!!.url)
         assertNotNull(albums.single().coverArt!!.authHeaders)
         assertEquals(302000L, tracks.single().durationMs)
+        assertEquals("${session.serverUrl}/Items/album-1/Images/Primary?maxWidth=96", tracks.single().coverArt!!.url)
         val streamUrl = tracks.single().stream!!.url.toHttpUrl()
         assertEquals("/Audio/track-1/universal", streamUrl.encodedPath)
         assertEquals("user-1", streamUrl.queryParameter("UserId"))
@@ -88,6 +89,7 @@ class OkHttpJellyfinApiTest {
         assertNotNull(tracks.single().stream!!.authHeaders)
         assertEquals(listOf("track-1", "track-2"), restoredTracks.map { it.id })
         assertEquals(3, results.totalCount)
+        assertEquals("${session.serverUrl}/Items/album-1/Images/Primary?maxWidth=96", results.tracks.single().coverArt!!.url)
 
         val albumsRequest = server.takeRequest()
         assertEquals("/Users/user-1/Items", albumsRequest.requestUrl!!.encodedPath)

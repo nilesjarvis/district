@@ -203,6 +203,7 @@ fun MonoNowPlayingBar(
     coverColor: Color,
     tintColor: Color = coverColor,
     modifier: Modifier = Modifier,
+    cover: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -216,7 +217,9 @@ fun MonoNowPlayingBar(
                 .size(34.dp)
                 .background(coverColor)
                 .border(1.dp, MonoTokens.Line2),
-        )
+        ) {
+            cover?.invoke()
+        }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             UpperLabel("$code - NOW", color = MonoTokens.Mut2, fontSize = 8.sp)

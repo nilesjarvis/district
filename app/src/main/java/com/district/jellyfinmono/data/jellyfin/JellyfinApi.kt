@@ -49,12 +49,18 @@ internal fun JellyfinItem.toAlbum(baseUrl: String, authHeaders: AuthHeaders?): A
         tintArgb = stableTintArgb(id),
     )
 
-internal fun JellyfinItem.toTrack(session: AuthSession, authHeaders: AuthHeaders?): Track =
-    Track(
+internal fun JellyfinItem.toTrack(
+    session: AuthSession,
+    authHeaders: AuthHeaders?,
+    albumIdOverride: String? = null,
+): Track {
+    val albumItemId = albumIdOverride?.takeIf { it.isNotBlank() } ?: parentId
+    val coverItemId = albumItemId ?: id
+    return Track(
         id = id,
         title = name,
         artist = artists.firstOrNull().orEmpty(),
-        albumId = parentId,
+        albumId = albumItemId,
         indexNumber = indexNumber,
         durationMs = runtimeTicks?.ticksToMillis() ?: 0L,
         stream = RemoteResource(
@@ -62,11 +68,12 @@ internal fun JellyfinItem.toTrack(session: AuthSession, authHeaders: AuthHeaders
             authHeaders = authHeaders,
         ),
         coverArt = RemoteResource(
-            url = "${session.serverUrl}/Items/$id/Images/Primary?maxWidth=96",
+            url = "${session.serverUrl}/Items/$coverItemId/Images/Primary?maxWidth=96",
             authHeaders = authHeaders,
         ),
-        tintArgb = stableTintArgb(id),
+        tintArgb = stableTintArgb(coverItemId),
     )
+}
 
 // The /Audio/{id}/universal endpoint returns an empty 200 unless the request states what the
 // client can play. Container drives direct play; the Transcoding* fields give a progressive
