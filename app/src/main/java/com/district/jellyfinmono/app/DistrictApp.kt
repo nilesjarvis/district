@@ -100,6 +100,7 @@ import com.district.jellyfinmono.core.media.PlayerState
 import com.district.jellyfinmono.core.media.horizontalFraction
 import com.district.jellyfinmono.feature.onboarding.OnboardingStep
 import com.district.jellyfinmono.feature.onboarding.OnboardingUiState
+import kotlinx.coroutines.delay
 
 @Composable
 fun DistrictApp(viewModel: AppViewModel) {
@@ -499,12 +500,24 @@ private fun StepButtons(left: String, onLeft: () -> Unit, right: String, onRight
 private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppActions()) {
     BackHandler(enabled = state.route != LibraryRoute.Albums, onBack = actions.backToLibrary)
     val albumGridState = rememberLazyGridState()
-    val targetControlZoneHeight = when {
-        state.route == LibraryRoute.Search -> 0.dp
-        state.playerState.currentTrack == null -> 0.dp
-        !state.playerState.isPlaying -> 0.dp
-        else -> ShellMetrics.ControlZoneHeight
+    var controlZoneExpanded by remember {
+        mutableStateOf(
+            state.route != LibraryRoute.Search &&
+                state.playerState.currentTrack != null &&
+                state.playerState.isPlaying,
+        )
     }
+    LaunchedEffect(state.route, state.playerState.currentTrack?.id, state.playerState.isPlaying) {
+        when {
+            state.route == LibraryRoute.Search -> controlZoneExpanded = false
+            state.playerState.currentTrack != null && state.playerState.isPlaying -> controlZoneExpanded = true
+            else -> {
+                delay(CONTROL_ZONE_COLLAPSE_GRACE_MS)
+                controlZoneExpanded = false
+            }
+        }
+    }
+    val targetControlZoneHeight = if (controlZoneExpanded) ShellMetrics.ControlZoneHeight else 0.dp
     val controlZoneHeight by animateDpAsState(
         targetValue = targetControlZoneHeight,
         animationSpec = tween(durationMillis = 170, easing = FastOutSlowInEasing),
@@ -1266,6 +1279,8 @@ private fun OnboardingStep.progressLabel(): String =
         OnboardingStep.SignIn -> "02 / 02"
         OnboardingStep.Connected -> "DONE"
     }
+
+private const val CONTROL_ZONE_COLLAPSE_GRACE_MS = 360L
 
 @Preview(widthDp = 411, heightDp = 923)
 @Composable
