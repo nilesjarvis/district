@@ -26,6 +26,9 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(MonoTokens.BgInt),
             navigationBarStyle = SystemBarStyle.dark(MonoTokens.BgInt),
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
         requestNotificationPermissionIfNeeded()
         val graph = (application as DistrictApplication).graph
         setContent {
