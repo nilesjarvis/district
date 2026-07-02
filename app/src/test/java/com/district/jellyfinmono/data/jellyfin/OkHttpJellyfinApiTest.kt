@@ -118,6 +118,24 @@ class OkHttpJellyfinApiTest {
     }
 
     @Test
+    fun artistAlbumsQueriesByAlbumArtistIdAndParsesArtistId() = runTest {
+        val session = authSession()
+        server.enqueue(json("""{"Items":[{"Id":"album-1","Type":"MusicAlbum","Name":"All Eyez On Me","ProductionYear":1996,"AlbumArtist":"2pac","AlbumArtists":[{"Id":"artist-1","Name":"2pac"}]}]}"""))
+
+        val albums = api.artistAlbums(session, "artist-1")
+
+        assertEquals("All Eyez On Me", albums.single().title)
+        assertEquals("artist-1", albums.single().artistId)
+        val request = server.takeRequest()
+        assertEquals("/Users/user-1/Items", request.requestUrl!!.encodedPath)
+        assertEquals("MusicAlbum", request.requestUrl!!.queryParameter("IncludeItemTypes"))
+        assertEquals("artist-1", request.requestUrl!!.queryParameter("AlbumArtistIds"))
+        assertEquals("true", request.requestUrl!!.queryParameter("Recursive"))
+        assertEquals("ProductionYear,SortName", request.requestUrl!!.queryParameter("SortBy"))
+        assertEquals("token", request.getHeader("X-Emby-Token"))
+    }
+
+    @Test
     fun albumsCanScopeToLibraryParent() = runTest {
         val session = authSession()
         server.enqueue(json("""{"Items":[]}"""))

@@ -8,6 +8,7 @@ import com.district.jellyfinmono.core.network.DefaultDispatcherProvider
 import com.district.jellyfinmono.core.network.DispatcherProvider
 import com.district.jellyfinmono.core.persistence.PlaybackStore
 import com.district.jellyfinmono.core.persistence.SessionStore
+import com.district.jellyfinmono.domain.Artist
 import com.district.jellyfinmono.domain.AuthSession
 import com.district.jellyfinmono.domain.Album
 import com.district.jellyfinmono.domain.DistrictError
@@ -143,7 +144,10 @@ class AppViewModel(
     private var lastPersistedPlayback: PlaybackSnapshot? = null
 
     fun activateSearch() {
-        updateLibrary { copy(route = LibraryRoute.Search, error = null) }
+        updateLibrary {
+            if (route == LibraryRoute.Search) this
+            else copy(route = LibraryRoute.Search, backStack = backStack + route, error = null)
+        }
         val state = libraryState() ?: return
         if (state.searchQuery.isBlank()) return
         scheduleSearch(state.searchQuery)
@@ -166,7 +170,7 @@ class AppViewModel(
         updateLibrary {
             copy(
                 route = LibraryRoute.AlbumDetail,
-                previousRoute = route,
+                backStack = backStack + route,
                 selectedAlbum = album,
                 albumTracks = emptyList(),
                 isAlbumLoading = true,
@@ -191,15 +195,45 @@ class AppViewModel(
         }
     }
 
+    fun openArtist(artist: Artist) {
+        if (artist.id.isBlank()) return
+        val state = libraryState() ?: return
+        updateLibrary {
+            copy(
+                route = LibraryRoute.ArtistDetail,
+                backStack = backStack + route,
+                selectedArtist = artist,
+                artistAlbums = emptyList(),
+                isArtistLoading = true,
+                error = null,
+            )
+        }
+        viewModelScope.launch(dispatchers.io) {
+            when (val albums = repository.artistAlbums(state.session, artist.id)) {
+                is DistrictResult.Failure -> {
+                    if (albums.error == DistrictError.ExpiredToken) {
+                        handleExpiredSession(state.session)
+                    } else {
+                        updateLibrary {
+                            copy(isArtistLoading = false, error = albums.error)
+                        }
+                    }
+                }
+                is DistrictResult.Success -> updateLibrary {
+                    copy(isArtistLoading = false, artistAlbums = albums.value)
+                }
+            }
+        }
+    }
+
     fun backToLibrary() {
         searchJob?.cancel()
         updateLibrary {
-            val target = if (previousRoute == LibraryRoute.Search) LibraryRoute.Search else LibraryRoute.Albums
             copy(
-                route = target,
-                selectedAlbum = null,
-                albumTracks = emptyList(),
+                route = backStack.lastOrNull() ?: LibraryRoute.Albums,
+                backStack = backStack.dropLast(1),
                 isAlbumLoading = false,
+                isArtistLoading = false,
                 isSearching = false,
                 error = null,
             )

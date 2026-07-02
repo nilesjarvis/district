@@ -92,6 +92,7 @@ import com.district.jellyfinmono.core.design.MonoVolumeBar
 import com.district.jellyfinmono.core.design.ShellMetrics
 import com.district.jellyfinmono.core.design.UpperLabel
 import com.district.jellyfinmono.domain.Album
+import com.district.jellyfinmono.domain.Artist
 import com.district.jellyfinmono.domain.DistrictError
 import com.district.jellyfinmono.domain.SearchResults
 import com.district.jellyfinmono.domain.Track
@@ -123,6 +124,7 @@ fun DistrictApp(viewModel: AppViewModel) {
             activateSearch = viewModel::activateSearch,
             updateSearchQuery = viewModel::updateSearchQuery,
             openAlbum = viewModel::openAlbum,
+            openArtist = viewModel::openArtist,
             backToLibrary = viewModel::backToLibrary,
             playAlbumFromStart = viewModel::playAlbumFromStart,
             playTrack = viewModel::playTrack,
@@ -164,6 +166,7 @@ data class AppActions(
     val activateSearch: () -> Unit = {},
     val updateSearchQuery: (String) -> Unit = {},
     val openAlbum: (Album) -> Unit = {},
+    val openArtist: (Artist) -> Unit = {},
     val backToLibrary: () -> Unit = {},
     val playAlbumFromStart: () -> Unit = {},
     val playTrack: (Track) -> Unit = {},
@@ -542,6 +545,7 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
                 LibraryRoute.Albums -> LibraryAlbumGrid(state, actions, albumGridState)
                 LibraryRoute.Search -> SearchResultsRegion(state, actions)
                 LibraryRoute.AlbumDetail -> AlbumDetailRegion(state, actions, albumDetailGridState)
+                LibraryRoute.ArtistDetail -> ArtistDetailRegion(state, actions)
             }
         },
         nowPlaying = { NowPlayingFromState(state.playerState, actions) },
@@ -590,6 +594,17 @@ private fun LibraryTopBar(state: LibraryUiState, actions: AppActions) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             UpperLabel("< ALBUM", color = MonoTokens.Ink)
+            Spacer(Modifier.weight(1f))
+            UpperLabel("BACK", color = MonoTokens.Mut2)
+        }
+        LibraryRoute.ArtistDetail -> Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(onClick = actions.backToLibrary)
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            UpperLabel("< ARTIST", color = MonoTokens.Ink)
             Spacer(Modifier.weight(1f))
             UpperLabel("BACK", color = MonoTokens.Mut2)
         }
@@ -775,7 +790,12 @@ private fun SearchResultsRegion(state: LibraryUiState, actions: AppActions) {
                     SectionLabel("ARTISTS - ${results.artists.size}")
                 }
                 items(results.artists, span = { GridItemSpan(2) }) { artist ->
-                    MonoTrackRow(number = "AR", title = artist.name, duration = "")
+                    MonoTrackRow(
+                        number = "AR",
+                        title = artist.name,
+                        duration = "›",
+                        onClick = { actions.openArtist(artist) },
+                    )
                 }
             }
             if (results.tracks.isNotEmpty()) {
@@ -859,8 +879,13 @@ private fun AlbumDetailRegion(state: LibraryUiState, actions: AppActions, gridSt
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = album.artist.ifBlank { "Unknown artist" },
-                        color = MonoTokens.Mut,
+                        text = if (album.artistId != null) "${album.artist.ifBlank { "Unknown artist" }} ›" else album.artist.ifBlank { "Unknown artist" },
+                        modifier = if (album.artistId != null) {
+                            Modifier.clickable { actions.openArtist(Artist(id = album.artistId, name = album.artist)) }
+                        } else {
+                            Modifier
+                        },
+                        color = if (album.artistId != null) MonoTokens.Ink else MonoTokens.Mut,
                         fontFamily = JetBrainsMono,
                         fontSize = 11.sp,
                         maxLines = 1,
@@ -909,6 +934,78 @@ private fun AlbumDetailRegion(state: LibraryUiState, actions: AppActions, gridSt
                     modifier = Modifier.testTag("album-track-${track.id}"),
                     isPlaying = state.playerState.currentTrack?.id == track.id,
                     onClick = { actions.playTrack(track) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtistDetailRegion(state: LibraryUiState, actions: AppActions) {
+    val artist = state.selectedArtist
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("artist-detail-region")
+            .background(MonoTokens.Line)
+            .border(1.dp, MonoTokens.Line),
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        if (artist != null) {
+            item(span = { GridItemSpan(2) }) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MonoTokens.Panel)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    UpperLabel("ARTIST", color = MonoTokens.Mut2)
+                    Text(
+                        text = artist.name,
+                        color = MonoTokens.Ink,
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    UpperLabel(
+                        if (state.isArtistLoading) "LOADING DISCOGRAPHY" else "${state.artistAlbums.size} ALBUMS",
+                        color = MonoTokens.Mut,
+                    )
+                }
+            }
+        }
+        if (state.error != null) {
+            item(span = { GridItemSpan(2) }) {
+                StateTile(state.error.label(), color = MonoTokens.Accent, height = 72.dp)
+            }
+        }
+        if (state.isArtistLoading) {
+            item(span = { GridItemSpan(2) }) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(72.dp)
+                        .background(MonoTokens.Panel),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    UpperLabel("LOADING DISCOGRAPHY", color = MonoTokens.Mut)
+                }
+            }
+        } else if (artist != null && state.error == null && state.artistAlbums.isEmpty()) {
+            item(span = { GridItemSpan(2) }) {
+                StateTile("NO ALBUMS", color = MonoTokens.Mut, height = 72.dp)
+            }
+        } else {
+            itemsIndexed(state.artistAlbums) { index, album ->
+                AlbumTileWithArt(
+                    album = album,
+                    fallbackColor = previewColor(index),
+                    onClick = { actions.openAlbum(album) },
                 )
             }
         }

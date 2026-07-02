@@ -31,6 +31,7 @@ data class Album(
     val trackCount: Int?,
     val coverArt: RemoteResource?,
     val tintArgb: Long? = null,
+    val artistId: String? = null,
 )
 
 data class Track(

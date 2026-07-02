@@ -65,6 +65,7 @@ class DefaultJellyfinRepositoryTest {
 
         override suspend fun libraries(session: AuthSession) = emptyList<com.district.jellyfinmono.domain.MusicLibrary>()
         override suspend fun albums(session: AuthSession, parentId: String?) = emptyList<com.district.jellyfinmono.domain.Album>()
+        override suspend fun artistAlbums(session: AuthSession, artistId: String) = emptyList<com.district.jellyfinmono.domain.Album>()
         override suspend fun albumTracks(session: AuthSession, albumId: String) = emptyList<com.district.jellyfinmono.domain.Track>()
         override suspend fun tracksByIds(session: AuthSession, ids: List<String>) = emptyList<com.district.jellyfinmono.domain.Track>()
         override suspend fun search(session: AuthSession, query: String) = com.district.jellyfinmono.domain.SearchResults(emptyList(), emptyList(), emptyList())

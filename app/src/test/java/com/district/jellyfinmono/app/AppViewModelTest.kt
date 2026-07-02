@@ -7,6 +7,7 @@ import com.district.jellyfinmono.core.persistence.InMemoryPlaybackStore
 import com.district.jellyfinmono.core.persistence.InMemorySessionStore
 import com.district.jellyfinmono.core.persistence.SessionStore
 import com.district.jellyfinmono.domain.Album
+import com.district.jellyfinmono.domain.Artist
 import com.district.jellyfinmono.domain.AuthSession
 import com.district.jellyfinmono.domain.DistrictError
 import com.district.jellyfinmono.domain.DistrictResult
@@ -576,6 +577,68 @@ class AppViewModelTest {
         assertEquals(null, playbackStore.load())
     }
 
+    @Test
+    fun openArtistLoadsDiscographyAndNavigatesToArtistDetail() = runTest {
+        val album = Album("album-1", "All Eyez On Me", "2pac", 1996, 16, null)
+        val repository = FakeRepository(artistAlbumsResult = DistrictResult.Success(listOf(album)))
+        val viewModel = viewModel(repository = repository)
+
+        viewModel.connectServer()
+        viewModel.checkServer()
+        viewModel.signIn()
+        viewModel.enterLibrary()
+        viewModel.openArtist(Artist("artist-1", "2pac"))
+
+        val state = (viewModel.uiState.value as AppUiState.Library).state
+        assertEquals(LibraryRoute.ArtistDetail, state.route)
+        assertEquals("artist-1", repository.lastArtistId)
+        assertEquals("2pac", state.selectedArtist?.name)
+        assertEquals(listOf("album-1"), state.artistAlbums.map { it.id })
+        assertFalse(state.isArtistLoading)
+    }
+
+    @Test
+    fun blankArtistIdDoesNotNavigate() = runTest {
+        val repository = FakeRepository()
+        val viewModel = viewModel(repository = repository)
+        viewModel.connectServer()
+        viewModel.checkServer()
+        viewModel.signIn()
+        viewModel.enterLibrary()
+
+        viewModel.openArtist(Artist("", "Unknown"))
+
+        val state = (viewModel.uiState.value as AppUiState.Library).state
+        assertEquals(LibraryRoute.Albums, state.route)
+        assertEquals(null, repository.lastArtistId)
+    }
+
+    @Test
+    fun backStackReturnsThroughArtistDetailThenToAlbums() = runTest {
+        val album = Album("album-1", "All Eyez On Me", "2pac", 1996, 16, null)
+        val repository = FakeRepository(
+            artistAlbumsResult = DistrictResult.Success(listOf(album)),
+            tracksResult = DistrictResult.Success(listOf(Track("t1", "Ambitionz", "2pac", "album-1", 1, 200000L, null))),
+        )
+        val viewModel = viewModel(repository = repository)
+        viewModel.connectServer()
+        viewModel.checkServer()
+        viewModel.signIn()
+        viewModel.enterLibrary()
+
+        viewModel.openArtist(Artist("artist-1", "2pac"))
+        viewModel.openAlbum(album)
+        assertEquals(LibraryRoute.AlbumDetail, (viewModel.uiState.value as AppUiState.Library).state.route)
+
+        viewModel.backToLibrary()
+        val backToArtist = (viewModel.uiState.value as AppUiState.Library).state
+        assertEquals(LibraryRoute.ArtistDetail, backToArtist.route)
+        assertEquals(listOf("album-1"), backToArtist.artistAlbums.map { it.id })
+
+        viewModel.backToLibrary()
+        assertEquals(LibraryRoute.Albums, (viewModel.uiState.value as AppUiState.Library).state.route)
+    }
+
     private fun viewModel(
         repository: FakeRepository = FakeRepository(),
         sessionStore: SessionStore = InMemorySessionStore(),
@@ -599,12 +662,14 @@ class AppViewModelTest {
         private val albumsResult: DistrictResult<List<Album>> = DistrictResult.Success(emptyList()),
         private val tracksResult: DistrictResult<List<Track>> = DistrictResult.Success(emptyList()),
         private val tracksByIdsResult: DistrictResult<List<Track>> = DistrictResult.Success(emptyList()),
+        private val artistAlbumsResult: DistrictResult<List<Album>> = DistrictResult.Success(emptyList()),
         var searchResult: DistrictResult<SearchResults> = DistrictResult.Success(SearchResults(emptyList(), emptyList(), emptyList())),
     ) : JellyfinRepository {
         var checkedUrl: String? = null
         var checkCount: Int = 0
         var searchCount: Int = 0
         var lastSearchQuery: String? = null
+        var lastArtistId: String? = null
 
         override suspend fun checkServer(serverUrl: String): DistrictResult<ServerInfo> {
             checkCount += 1
@@ -620,6 +685,11 @@ class AppViewModelTest {
 
         override suspend fun albums(session: AuthSession, parentId: String?): DistrictResult<List<Album>> =
             albumsResult
+
+        override suspend fun artistAlbums(session: AuthSession, artistId: String): DistrictResult<List<Album>> {
+            lastArtistId = artistId
+            return artistAlbumsResult
+        }
 
         override suspend fun albumTracks(session: AuthSession, albumId: String): DistrictResult<List<Track>> =
             tracksResult

@@ -1,5 +1,6 @@
 package com.district.jellyfinmono.app
 
+import com.district.jellyfinmono.domain.Artist
 import com.district.jellyfinmono.domain.AuthSession
 import com.district.jellyfinmono.domain.Album
 import com.district.jellyfinmono.domain.DistrictError
@@ -20,10 +21,13 @@ data class LibraryUiState(
     val selectedLibraryId: String? = null,
     val albums: List<Album> = emptyList(),
     val route: LibraryRoute = LibraryRoute.Albums,
-    val previousRoute: LibraryRoute = LibraryRoute.Albums,
+    val backStack: List<LibraryRoute> = emptyList(),
     val selectedAlbum: Album? = null,
     val albumTracks: List<Track> = emptyList(),
     val isAlbumLoading: Boolean = false,
+    val selectedArtist: Artist? = null,
+    val artistAlbums: List<Album> = emptyList(),
+    val isArtistLoading: Boolean = false,
     val searchQuery: String = "",
     val recentSearches: List<String> = emptyList(),
     val searchResults: SearchResults = SearchResults(emptyList(), emptyList(), emptyList()),
@@ -37,4 +41,5 @@ enum class LibraryRoute {
     Albums,
     Search,
     AlbumDetail,
+    ArtistDetail,
 }

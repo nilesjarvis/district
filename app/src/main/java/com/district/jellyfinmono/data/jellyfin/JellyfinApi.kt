@@ -16,6 +16,7 @@ interface JellyfinApi {
     suspend fun authenticate(serverUrl: String, username: String, password: String, deviceId: String): AuthSession
     suspend fun libraries(session: AuthSession): List<MusicLibrary>
     suspend fun albums(session: AuthSession, parentId: String? = null): List<Album>
+    suspend fun artistAlbums(session: AuthSession, artistId: String): List<Album>
     suspend fun albumTracks(session: AuthSession, albumId: String): List<Track>
     suspend fun tracksByIds(session: AuthSession, ids: List<String>): List<Track>
     suspend fun search(session: AuthSession, query: String): SearchResults
@@ -26,6 +27,7 @@ internal data class JellyfinItem(
     val type: String,
     val name: String,
     val albumArtist: String?,
+    val albumArtistId: String?,
     val artists: List<String>,
     val parentId: String?,
     val collectionType: String?,
@@ -40,6 +42,7 @@ internal fun JellyfinItem.toAlbum(baseUrl: String, authHeaders: AuthHeaders?): A
         id = id,
         title = name,
         artist = albumArtist ?: artists.firstOrNull().orEmpty(),
+        artistId = albumArtistId,
         productionYear = productionYear,
         trackCount = childCount,
         coverArt = RemoteResource(

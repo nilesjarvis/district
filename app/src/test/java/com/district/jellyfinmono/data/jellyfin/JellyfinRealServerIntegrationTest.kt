@@ -54,6 +54,19 @@ class JellyfinRealServerIntegrationTest {
         val search = repository.search(session.value, "a")
         assertTrue(search is DistrictResult.Success)
 
+        // Artist discography: pick an album that exposes an artist id, then confirm the
+        // AlbumArtistIds endpoint returns that album back among the artist's releases.
+        val albumWithArtist = albums.value.firstOrNull { !it.artistId.isNullOrBlank() }
+        if (albumWithArtist != null) {
+            val discography = repository.artistAlbums(session.value, albumWithArtist.artistId!!)
+            assertTrue(discography is DistrictResult.Success)
+            discography as DistrictResult.Success
+            assertTrue(
+                "Discography for ${albumWithArtist.artist} should include ${albumWithArtist.title}",
+                discography.value.any { it.id == albumWithArtist.id },
+            )
+        }
+
         // Regression guard for the empty-stream bug: the universal endpoint must return real
         // audio bytes, not a 200 with an empty body. Exercises the actual stream URL + headers
         // the app hands to ExoPlayer.

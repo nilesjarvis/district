@@ -30,6 +30,9 @@ class DefaultJellyfinRepository(
     override suspend fun albums(session: AuthSession, parentId: String?) =
         runCatchingDistrict { api.albums(session, parentId) }
 
+    override suspend fun artistAlbums(session: AuthSession, artistId: String) =
+        runCatchingDistrict { api.artistAlbums(session, artistId) }
+
     override suspend fun albumTracks(session: AuthSession, albumId: String) =
         runCatchingDistrict { api.albumTracks(session, albumId) }
 

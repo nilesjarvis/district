@@ -94,6 +94,22 @@ class OkHttpJellyfinApi(
         json.items().map { it.toJellyfinItem().toAlbum(session.serverUrl, session.authHeaders()) }
     }
 
+    override suspend fun artistAlbums(session: AuthSession, artistId: String) = withContext(dispatchers.io) {
+        val json = getJson(
+            baseUrl = session.serverUrl,
+            path = "/Users/${session.userId}/Items",
+            session = session,
+            query = mapOf(
+                "IncludeItemTypes" to "MusicAlbum",
+                "AlbumArtistIds" to artistId,
+                "Recursive" to "true",
+                "SortBy" to "ProductionYear,SortName",
+                "SortOrder" to "Descending",
+            ),
+        )
+        json.items().map { it.toJellyfinItem().toAlbum(session.serverUrl, session.authHeaders()) }
+    }
+
     override suspend fun albumTracks(session: AuthSession, albumId: String) = withContext(dispatchers.io) {
         val json = getJson(
             baseUrl = session.serverUrl,
@@ -197,6 +213,7 @@ class OkHttpJellyfinApi(
             type = optString("Type"),
             name = optString("Name"),
             albumArtist = optString("AlbumArtist").ifBlank { null },
+            albumArtistId = firstArtistId("AlbumArtists") ?: firstArtistId("ArtistItems"),
             artists = optJSONArray("Artists")?.strings().orEmpty(),
             parentId = optString("ParentId").ifBlank { optString("AlbumId").ifBlank { null } },
             collectionType = optString("CollectionType").ifBlank { null },
@@ -208,6 +225,9 @@ class OkHttpJellyfinApi(
 
     private fun JSONArray.strings(): List<String> =
         (0 until length()).mapNotNull { index -> optString(index).takeIf { it.isNotBlank() } }
+
+    private fun JSONObject.firstArtistId(field: String): String? =
+        optJSONArray(field)?.optJSONObject(0)?.optString("Id")?.ifBlank { null }
 
     private fun authorizationHeader(deviceId: String, token: String?): String =
         buildString {
