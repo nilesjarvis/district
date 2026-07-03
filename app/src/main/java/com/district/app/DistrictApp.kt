@@ -59,7 +59,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
@@ -526,6 +530,43 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
     LaunchedEffect(state.selectedAlbum?.id) {
         albumDetailGridState.scrollToItem(0)
     }
+    var topBarVisible by remember(state.route, state.selectedAlbum?.id, state.selectedArtist?.id) { mutableStateOf(true) }
+    var topBarScrollDelta by remember(state.route, state.selectedAlbum?.id, state.selectedArtist?.id) { mutableStateOf(0f) }
+    val topBarScrollThresholdPx = with(LocalDensity.current) { TOP_BAR_SCROLL_THRESHOLD.toPx() }
+    val topBarScrollConnection = remember(state.route, state.selectedAlbum?.id, state.selectedArtist?.id, topBarScrollThresholdPx) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                val deltaY = when {
+                    consumed.y > TOP_BAR_SCROLL_EPSILON_PX || consumed.y < -TOP_BAR_SCROLL_EPSILON_PX -> consumed.y
+                    available.y > TOP_BAR_SCROLL_EPSILON_PX || available.y < -TOP_BAR_SCROLL_EPSILON_PX -> available.y
+                    else -> return Offset.Zero
+                }
+                topBarScrollDelta = if (
+                    (topBarScrollDelta >= 0f && deltaY >= 0f) ||
+                    (topBarScrollDelta <= 0f && deltaY <= 0f)
+                ) {
+                    topBarScrollDelta + deltaY
+                } else {
+                    deltaY
+                }
+                when {
+                    topBarScrollDelta <= -topBarScrollThresholdPx -> {
+                        topBarVisible = false
+                        topBarScrollDelta = 0f
+                    }
+                    topBarScrollDelta >= topBarScrollThresholdPx -> {
+                        topBarVisible = true
+                        topBarScrollDelta = 0f
+                    }
+                }
+                return Offset.Zero
+            }
+        }
+    }
     var keepControlsExpandedForTrackHandoff by remember { mutableStateOf(false) }
     LaunchedEffect(keepControlsExpandedForTrackHandoff, state.playerState.currentTrack?.id) {
         if (keepControlsExpandedForTrackHandoff) {
@@ -575,6 +616,8 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
         nowPlaying = { NowPlayingFromState(state, actions, playerTint) },
         controlZone = { PlayerControlZone(state.playerState, controlActions, playerTint) },
         controlZoneHeight = controlZoneHeight,
+        headerVisible = topBarVisible,
+        modifier = Modifier.nestedScroll(topBarScrollConnection),
     )
 }
 
@@ -1710,6 +1753,8 @@ private fun OnboardingStep.progressLabel(): String =
     }
 
 private const val CONTROL_ZONE_HANDOFF_GRACE_MS = 360L
+private val TOP_BAR_SCROLL_THRESHOLD = 14.dp
+private const val TOP_BAR_SCROLL_EPSILON_PX = 0.5f
 
 @Preview(widthDp = 411, heightDp = 923)
 @Composable

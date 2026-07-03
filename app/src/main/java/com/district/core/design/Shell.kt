@@ -1,5 +1,8 @@
 package com.district.core.design
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +18,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -39,7 +44,14 @@ fun MonoShell(
     controlZone: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     controlZoneHeight: Dp = ShellMetrics.ControlZoneHeight,
+    headerVisible: Boolean = true,
 ) {
+    val headerHeight = animateDpAsState(
+        targetValue = if (headerVisible) ShellMetrics.HeaderHeight else 0.dp,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "shellHeaderHeight",
+    )
+    val headerProgress = (headerHeight.value / ShellMetrics.HeaderHeight).coerceIn(0f, 1f)
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -49,9 +61,11 @@ fun MonoShell(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(ShellMetrics.HeaderHeight)
+                .height(headerHeight.value)
+                .clipToBounds()
+                .alpha(headerProgress)
                 .background(MonoTokens.Bg)
-                .border(1.dp, MonoTokens.Line),
+                .then(if (headerHeight.value > 0.dp) Modifier.border(1.dp, MonoTokens.Line) else Modifier),
         ) {
             header()
         }
