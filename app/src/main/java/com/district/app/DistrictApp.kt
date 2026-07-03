@@ -904,41 +904,59 @@ private fun AlbumDetailRegion(state: LibraryUiState, actions: AppActions, gridSt
                 )
             }
             item {
+                val artistId = album.artistId
+                val artistName = album.artist.ifBlank { "Unknown artist" }
+                val trackCount = album.trackCount ?: state.albumTracks.size
+                val totalDuration = state.albumTracks.sumOf { it.durationMs }.formatDuration()
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
                         .background(MonoTokens.Panel)
                         .padding(12.dp),
-                    verticalArrangement = Arrangement.Center,
+                    verticalArrangement = Arrangement.Top,
                 ) {
                     UpperLabel(album.productionYear?.toString() ?: "ALBUM", color = MonoTokens.Mut2)
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = album.title,
                         color = MonoTokens.Ink,
                         fontFamily = JetBrainsMono,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        maxLines = 2,
+                        fontSize = 20.sp,
+                        lineHeight = 22.sp,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = if (album.artistId != null) "${album.artist.ifBlank { "Unknown artist" }} ›" else album.artist.ifBlank { "Unknown artist" },
-                        modifier = if (album.artistId != null) {
-                            Modifier.clickable { actions.openArtist(Artist(id = album.artistId, name = album.artist)) }
-                        } else {
-                            Modifier
-                        },
-                        color = if (album.artistId != null) MonoTokens.Ink else MonoTokens.Mut,
-                        fontFamily = JetBrainsMono,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    UpperLabel(
-                        "${album.trackCount ?: state.albumTracks.size} TRACKS - ${state.albumTracks.sumOf { it.durationMs }.formatDuration()}",
-                        color = MonoTokens.Mut2,
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .then(
+                                if (artistId != null) {
+                                    Modifier.clickable {
+                                        actions.openArtist(Artist(id = artistId, name = album.artist))
+                                    }
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (artistId != null) "$artistName ›" else artistName,
+                            color = if (artistId != null) MonoTokens.Ink else MonoTokens.Mut,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Column {
+                        UpperLabel("${trackCount.toString().padStart(2, '0')} TRACKS", color = MonoTokens.Mut2)
+                        UpperLabel(totalDuration, color = MonoTokens.Mut2)
+                    }
                 }
             }
             item(span = { GridItemSpan(2) }) {
