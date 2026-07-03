@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.district.jellyfinmono"
+    namespace = "com.district"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.district.jellyfinmono"
+        applicationId = "com.district"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

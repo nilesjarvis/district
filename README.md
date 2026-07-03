@@ -15,7 +15,7 @@ District is a native Android music client for Jellyfin, built with Kotlin, Jetpa
 ## Project Layout
 
 ```text
-app/src/main/java/com/district/jellyfinmono/
+app/src/main/java/com/district/
   app/              App graph, state, ViewModel, Compose screens
   core/design/      Theme, typography, shell, reusable mono components
   core/media/       Media3 playback controller and control math
@@ -32,7 +32,7 @@ app/src/main/java/com/district/jellyfinmono/
 - Android SDK with API 35 installed
 - Gradle wrapper from this repository
 
-The app package is `com.district.jellyfinmono`, with `compileSdk` and `targetSdk` set to 35.
+The app package is `com.district`, with `compileSdk` and `targetSdk` set to 35.
 
 ## Build And Test
 
