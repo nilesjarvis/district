@@ -44,8 +44,7 @@ fun MonoShell(
         modifier = modifier
             .fillMaxSize()
             .background(MonoTokens.Bg)
-            .statusBarsPadding()
-            .navigationBarsPadding(),
+            .statusBarsPadding(),
     ) {
         Box(
             modifier = Modifier
@@ -83,16 +82,33 @@ fun MonoShell(
         ) {
             nowPlaying()
         }
+        // The bottom bar extends its own color behind the system gesture bar so there is no
+        // color seam at the very bottom edge. navigationBarsPadding keeps the interactive
+        // content above the pill while the background fills all the way down.
         if (controlZoneHeight > 0.dp) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(controlZoneHeight)
-                    .defaultMinSize(minHeight = ShellMetrics.MinTouchTarget)
-                    .background(MonoTokens.Panel),
+                    .background(MonoTokens.Panel)
+                    .navigationBarsPadding(),
             ) {
-                controlZone()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(controlZoneHeight)
+                        .defaultMinSize(minHeight = ShellMetrics.MinTouchTarget)
+                        .background(MonoTokens.Panel),
+                ) {
+                    controlZone()
+                }
             }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MonoTokens.Bg)
+                    .navigationBarsPadding(),
+            )
         }
     }
 }
