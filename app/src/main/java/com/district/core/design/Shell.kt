@@ -26,7 +26,7 @@ object ShellMetrics {
     val HeaderHeight: Dp = 46.dp
     val ContextBarHeight: Dp = 52.dp
     val NowPlayingHeight: Dp = 56.dp
-    val ControlZoneHeight: Dp = 280.dp
+    val ControlZoneHeight: Dp = 248.dp
     val MinTouchTarget: Dp = 44.dp
 }
 

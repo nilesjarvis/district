@@ -273,7 +273,9 @@ class DistrictAppUiTest {
             )
         }
 
-        compose.onNodeWithText("CONTROL / SCRUB").assertIsDisplayed()
+        compose.onNodeWithText("CONTROL / SCRUB").assertDoesNotExist()
+        compose.onNodeWithText("0:00").assertIsDisplayed()
+        compose.onNodeWithText("3:00").assertIsDisplayed()
         compose.onNodeWithTag("playback-scrub-ruler").assertIsDisplayed()
     }
 

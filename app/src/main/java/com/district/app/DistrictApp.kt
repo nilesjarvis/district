@@ -1250,16 +1250,10 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions) {
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            UpperLabel(
-                if (playerState.errorMessage.isNullOrBlank()) "CONTROL / SCRUB" else "PLAYBACK ERROR",
-                color = if (playerState.errorMessage.isNullOrBlank()) MonoTokens.Mut else MonoTokens.Accent,
-            )
-            Spacer(Modifier.weight(1f))
-            UpperLabel("${playerState.positionMs.formatDuration()} - ${playerState.durationMs.formatDuration()}", color = MonoTokens.Mut)
-        }
         InteractiveRuler(
             fraction = progress,
+            elapsed = playerState.positionMs.formatDuration(),
+            duration = playerState.durationMs.formatDuration(),
             onChange = { fraction ->
                 if (scrubGate.shouldFire(fraction)) {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1305,9 +1299,9 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions) {
 }
 
 @Composable
-private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
+private fun InteractiveRuler(fraction: Float, elapsed: String, duration: String, onChange: (Float) -> Unit) {
     val clamped = fraction.coerceIn(0f, 1f)
-    Canvas(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
@@ -1345,33 +1339,45 @@ private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
                 }
             },
     ) {
-        val w = size.width
-        val h = size.height
-        // Smooth warm fill for the played portion — no per-segment blocks.
-        drawRect(
-            color = MonoTokens.Accent.copy(alpha = 0.30f),
-            size = Size(w * clamped, h),
-        )
-        // Thin, subtle tick divisions; every fourth reads slightly stronger.
-        val divisions = 24
-        for (i in 1 until divisions) {
-            val x = w * i / divisions
-            val major = i % 4 == 0
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            // Smooth warm fill for the played portion — no per-segment blocks.
+            drawRect(
+                color = MonoTokens.Accent.copy(alpha = 0.30f),
+                size = Size(w * clamped, h),
+            )
+            // Thin, subtle tick divisions; every fourth reads slightly stronger.
+            val divisions = 24
+            for (i in 1 until divisions) {
+                val x = w * i / divisions
+                val major = i % 4 == 0
+                drawLine(
+                    color = MonoTokens.Line2.copy(alpha = if (major) 0.7f else 0.35f),
+                    start = Offset(x, 0f),
+                    end = Offset(x, h),
+                    strokeWidth = 1f,
+                )
+            }
+            // Bright playhead at the current position.
+            val playhead = (w * clamped).coerceIn(0f, w)
             drawLine(
-                color = MonoTokens.Line2.copy(alpha = if (major) 0.7f else 0.35f),
-                start = Offset(x, 0f),
-                end = Offset(x, h),
-                strokeWidth = 1f,
+                color = MonoTokens.Ink,
+                start = Offset(playhead, 0f),
+                end = Offset(playhead, h),
+                strokeWidth = 2.dp.toPx(),
             )
         }
-        // Bright playhead at the current position.
-        val playhead = (w * clamped).coerceIn(0f, w)
-        drawLine(
-            color = MonoTokens.Ink,
-            start = Offset(playhead, 0f),
-            end = Offset(playhead, h),
-            strokeWidth = 2.dp.toPx(),
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            UpperLabel(elapsed, color = MonoTokens.Ink, fontSize = 8.sp)
+            Spacer(Modifier.weight(1f))
+            UpperLabel(duration, color = MonoTokens.Ink, fontSize = 8.sp)
+        }
     }
 }
 
