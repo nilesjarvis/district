@@ -617,6 +617,7 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
         controlZone = { PlayerControlZone(state.playerState, controlActions, playerTint) },
         controlZoneHeight = controlZoneHeight,
         headerVisible = topBarVisible,
+        collapsedBottomColor = coverTint(playerTint, alpha = 0.22f),
         modifier = Modifier.nestedScroll(topBarScrollConnection),
     )
 }

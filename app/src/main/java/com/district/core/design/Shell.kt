@@ -20,6 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -45,6 +48,7 @@ fun MonoShell(
     modifier: Modifier = Modifier,
     controlZoneHeight: Dp = ShellMetrics.ControlZoneHeight,
     headerVisible: Boolean = true,
+    collapsedBottomColor: Color = MonoTokens.Bg,
 ) {
     val headerHeight = animateDpAsState(
         targetValue = if (headerVisible) ShellMetrics.HeaderHeight else 0.dp,
@@ -92,7 +96,20 @@ fun MonoShell(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(ShellMetrics.NowPlayingHeight)
-                .border(1.dp, MonoTokens.Line),
+                .then(
+                    if (controlZoneHeight > 0.dp) {
+                        Modifier.border(1.dp, MonoTokens.Line)
+                    } else {
+                        Modifier.drawBehind {
+                            drawLine(
+                                color = MonoTokens.Line,
+                                start = Offset.Zero,
+                                end = Offset(size.width, 0f),
+                                strokeWidth = 1.dp.toPx(),
+                            )
+                        }
+                    },
+                ),
         ) {
             nowPlaying()
         }
@@ -120,7 +137,7 @@ fun MonoShell(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MonoTokens.Bg)
+                    .background(collapsedBottomColor)
                     .navigationBarsPadding(),
             )
         }
