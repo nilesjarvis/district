@@ -1530,14 +1530,14 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions, tin
                 .height(72.dp),
             horizontalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            MonoButton("PREV", modifier = Modifier.weight(1f).testTag("control-prev-zone"), onClick = {
+            PlaybackControlButton("PREV", tintColor = tintColor, modifier = Modifier.weight(1f).testTag("control-prev-zone"), onClick = {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 actions.previousTrack()
             })
-            MonoButton(if (playerState.isPlaying) "PAUSE" else "PLAY", modifier = Modifier.weight(1f).testTag("control-play-zone"), active = true, onClick = {
+            PlaybackControlButton(if (playerState.isPlaying) "PAUSE" else "PLAY", tintColor = tintColor, modifier = Modifier.weight(1f).testTag("control-play-zone"), active = true, onClick = {
                 actions.playPause()
             })
-            MonoButton("NEXT", modifier = Modifier.weight(1f).testTag("control-next-zone"), onClick = {
+            PlaybackControlButton("NEXT", tintColor = tintColor, modifier = Modifier.weight(1f).testTag("control-next-zone"), onClick = {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 actions.nextTrack()
             })
@@ -1559,6 +1559,33 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions, tin
             Spacer(Modifier.width(8.dp))
             UpperLabel((playerState.volume * 100).toInt().toString(), color = MonoTokens.Mut2)
         }
+    }
+}
+
+@Composable
+private fun PlaybackControlButton(
+    text: String,
+    tintColor: Color,
+    modifier: Modifier = Modifier,
+    active: Boolean = false,
+    onClick: () -> Unit = {},
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .defaultMinSize(minHeight = ShellMetrics.MinTouchTarget)
+            .background(MonoTokens.Panel)
+            .background(coverTint(tintColor, alpha = if (active) 0.58f else 0.26f))
+            .border(1.dp, coverTint(tintColor, alpha = if (active) 0.80f else 0.42f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        UpperLabel(
+            text = text,
+            color = MonoTokens.Ink,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 
