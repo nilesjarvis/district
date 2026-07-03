@@ -81,6 +81,7 @@ class Media3PlaybackController(context: Context) : PlaybackController {
                 controller?.pause()
                 _state.value = _state.value.copy(
                     isPlaying = false,
+                    playWhenReady = false,
                     isAuthError = true,
                     errorMessage = "Session expired",
                 )
@@ -194,6 +195,7 @@ class Media3PlaybackController(context: Context) : PlaybackController {
             queue = currentQueue,
             currentTrack = current,
             isPlaying = player.isPlaying,
+            playWhenReady = player.playWhenReady,
             positionMs = player.currentPosition.coerceAtLeast(0L),
             durationMs = player.duration.takeIf { it > 0 } ?: current?.durationMs ?: 0L,
             volume = player.volume,

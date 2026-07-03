@@ -146,6 +146,7 @@ class DistrictAppUiTest {
                                 queue = tracks,
                                 currentTrack = track,
                                 isPlaying = true,
+                                playWhenReady = true,
                                 durationMs = track.durationMs,
                             )
                         },
@@ -251,6 +252,32 @@ class DistrictAppUiTest {
     }
 
     @Test
+    fun bufferingDuringSeekKeepsControlZoneExpanded() {
+        // Regression: scrubbing re-buffers, so ExoPlayer reports isPlaying=false while the user
+        // has not paused (playWhenReady stays true). The scrub zone must remain open.
+        val track = track()
+        compose.setContent {
+            DistrictAppContent(
+                AppUiState.Library(
+                    LibraryUiState(
+                        session = session(),
+                        playerState = PlayerState(
+                            queue = listOf(track),
+                            currentTrack = track,
+                            isPlaying = false,
+                            playWhenReady = true,
+                            durationMs = track.durationMs,
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        compose.onNodeWithText("CONTROL / SCRUB").assertIsDisplayed()
+        compose.onNodeWithTag("playback-scrub-ruler").assertIsDisplayed()
+    }
+
+    @Test
     fun nowPlayingTitleOpensCurrentAlbum() {
         val album = Album("album-1", "Linked Album", "District", 2024, 8, null)
         val track = track()
@@ -297,6 +324,7 @@ class DistrictAppUiTest {
                             queue = listOf(track),
                             currentTrack = track,
                             isPlaying = true,
+                            playWhenReady = true,
                             durationMs = track.durationMs,
                         ),
                     ),
@@ -350,6 +378,7 @@ class DistrictAppUiTest {
                             queue = listOf(track),
                             currentTrack = track,
                             isPlaying = true,
+                            playWhenReady = true,
                             durationMs = track.durationMs,
                         ),
                     ),
