@@ -26,6 +26,7 @@ import com.district.feature.onboarding.OnboardingStep
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -97,6 +98,29 @@ class AppViewModelTest {
         val library = viewModel.uiState.value as AppUiState.Library
         assertEquals(session, library.state.session)
         assertEquals("music", library.state.selectedLibraryId)
+    }
+
+    @Test
+    fun signInWithRememberDeviceDisabledDoesNotPersistSession() = runTest {
+        val oldSession = AuthSession("http://old-server", "old-token", "old-user", "old-demo", "old-device")
+        val sessionStore = ControlledSessionStore(savedSession = oldSession, startupSession = null)
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
+        val repository = FakeRepository(authResult = DistrictResult.Success(session))
+        val viewModel = viewModel(repository, sessionStore)
+        assertEquals(oldSession, sessionStore.savedSession)
+
+        viewModel.connectServer()
+        viewModel.checkServer()
+        viewModel.toggleRememberDevice()
+        viewModel.signIn()
+
+        val state = viewModel.uiState.value as AppUiState.Onboarding
+        assertEquals(OnboardingStep.Connected, state.state.step)
+        assertEquals(null, sessionStore.savedSession)
+
+        viewModel.enterLibrary()
+
+        assertEquals(session, (viewModel.uiState.value as AppUiState.Library).state.session)
     }
 
     @Test
@@ -200,6 +224,41 @@ class AppViewModelTest {
         assertEquals(listOf(track), state.albumTracks)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun staleAlbumTrackResponseDoesNotOverwriteCurrentAlbum() = runTest {
+        val slowAlbum = Album("album-slow", "Slow Album", "Molyneux", 2024, 1, null)
+        val fastAlbum = Album("album-fast", "Fast Album", "Molyneux", 2024, 1, null)
+        val slowTrack = Track("track-slow", "Slow Track", "Molyneux", slowAlbum.id, 1, 200000L, null)
+        val fastTrack = Track("track-fast", "Fast Track", "Molyneux", fastAlbum.id, 1, 200000L, null)
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val repository = FakeRepository(
+            albumTrackResults = mapOf(
+                slowAlbum.id to DistrictResult.Success(listOf(slowTrack)),
+                fastAlbum.id to DistrictResult.Success(listOf(fastTrack)),
+            ),
+            albumTrackDelaysMs = mapOf(slowAlbum.id to 100L),
+        )
+        val viewModel = viewModel(
+            repository = repository,
+            sessionStore = InMemorySessionStore(session),
+            dispatcher = dispatcher,
+        )
+        runCurrent()
+
+        viewModel.openAlbum(slowAlbum)
+        runCurrent()
+        viewModel.openAlbum(fastAlbum)
+        runCurrent()
+        advanceTimeBy(100)
+        runCurrent()
+
+        val state = (viewModel.uiState.value as AppUiState.Library).state
+        assertEquals(fastAlbum, state.selectedAlbum)
+        assertEquals(listOf(fastTrack), state.albumTracks)
+    }
+
     @Test
     fun albumTrackFailureStopsLoadingAndSurfacesError() = runTest {
         val album = Album("album-1", "Ghost Notes", "Molyneux", 2024, 2, null)
@@ -217,6 +276,29 @@ class AppViewModelTest {
         assertFalse(state.isAlbumLoading)
         assertEquals(DistrictError.Network("tracks down"), state.error)
         assertEquals(emptyList<Track>(), state.albumTracks)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun expiredTokenDuringAlbumTrackLoadClearsSessionFromSameJob() = runTest {
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
+        val sessionStore = SlowClearSessionStore(session, clearDelayMs = 1L)
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val viewModel = viewModel(
+            repository = FakeRepository(tracksResult = DistrictResult.Failure(DistrictError.ExpiredToken)),
+            sessionStore = sessionStore,
+            dispatcher = dispatcher,
+        )
+        runCurrent()
+
+        viewModel.openAlbum(Album("album-1", "Ghost Notes", "Molyneux", 2024, 2, null))
+        runCurrent()
+        advanceTimeBy(1)
+        runCurrent()
+
+        val state = viewModel.uiState.value as AppUiState.Onboarding
+        assertEquals(OnboardingStep.SignIn, state.state.step)
+        assertEquals(null, sessionStore.savedSession)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -312,6 +394,31 @@ class AppViewModelTest {
         val state = (viewModel.uiState.value as AppUiState.Library).state
         assertEquals(DistrictError.Network("search down"), state.error)
         assertEquals(0, state.searchResults.totalCount)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun lateAlbumCatalogLoadPreservesCurrentRoute() = runTest {
+        val album = Album("album-1", "Ghost Notes", "Molyneux", 2024, 3, null)
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val viewModel = viewModel(
+            repository = FakeRepository(
+                albumsResult = DistrictResult.Success(listOf(album)),
+                albumsDelayMs = 100L,
+            ),
+            sessionStore = InMemorySessionStore(session),
+            dispatcher = dispatcher,
+        )
+        runCurrent()
+
+        viewModel.activateSearch()
+        advanceTimeBy(100)
+        runCurrent()
+
+        val state = (viewModel.uiState.value as AppUiState.Library).state
+        assertEquals(LibraryRoute.Search, state.route)
+        assertEquals(listOf(album), state.albums)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -438,6 +545,41 @@ class AppViewModelTest {
         viewModel.playTrack(second)
 
         assertEquals(listOf("track-1", "track-2"), playbackController.lastQueue.map { it.id })
+        assertEquals(1, playbackController.lastStartIndex)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun playTrackFromSearchIgnoresStaleAlbumTrackQueue() = runTest {
+        val album = Album("album-1", "Ghost Notes", "Molyneux", 2024, 1, null)
+        val albumTrack = Track("album-track", "Album Track", "Molyneux", album.id, 1, 200000L, null)
+        val firstSearchTrack = Track("search-1", "Search First", "Molyneux", "album-2", 1, 190000L, null)
+        val secondSearchTrack = Track("search-2", "Search Second", "Molyneux", "album-3", 1, 180000L, null)
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val playbackController = FakePlaybackController()
+        val viewModel = viewModel(
+            repository = FakeRepository(
+                tracksResult = DistrictResult.Success(listOf(albumTrack)),
+                searchResult = DistrictResult.Success(
+                    SearchResults(emptyList(), listOf(firstSearchTrack, secondSearchTrack), emptyList()),
+                ),
+            ),
+            sessionStore = InMemorySessionStore(session),
+            playbackController = playbackController,
+            dispatcher = dispatcher,
+        )
+        runCurrent()
+
+        viewModel.openAlbum(album)
+        runCurrent()
+        viewModel.activateSearch()
+        viewModel.updateSearchQuery("search")
+        advanceTimeBy(150)
+        runCurrent()
+        viewModel.playTrack(secondSearchTrack)
+
+        assertEquals(listOf("search-1", "search-2"), playbackController.lastQueue.map { it.id })
         assertEquals(1, playbackController.lastStartIndex)
     }
 
@@ -681,6 +823,12 @@ class AppViewModelTest {
         assertTrue(state.isOffline)
         assertEquals(LibraryRoute.Downloads, state.route)
         assertEquals(listOf("album-1"), state.downloads.map { it.id })
+
+        viewModel.backToLibrary()
+
+        val afterBack = (viewModel.uiState.value as AppUiState.Library).state
+        assertTrue(afterBack.isOffline)
+        assertEquals(LibraryRoute.Downloads, afterBack.route)
     }
 
     @Test
@@ -812,6 +960,9 @@ class AppViewModelTest {
         private val tracksResult: DistrictResult<List<Track>> = DistrictResult.Success(emptyList()),
         private val tracksByIdsResult: DistrictResult<List<Track>> = DistrictResult.Success(emptyList()),
         private val artistAlbumsResult: DistrictResult<List<Album>> = DistrictResult.Success(emptyList()),
+        private val albumTrackResults: Map<String, DistrictResult<List<Track>>> = emptyMap(),
+        private val albumTrackDelaysMs: Map<String, Long> = emptyMap(),
+        private val albumsDelayMs: Long = 0L,
         var searchResult: DistrictResult<SearchResults> = DistrictResult.Success(SearchResults(emptyList(), emptyList(), emptyList())),
     ) : JellyfinRepository {
         var checkedUrl: String? = null
@@ -832,16 +983,20 @@ class AppViewModelTest {
         override suspend fun libraries(session: AuthSession): DistrictResult<List<MusicLibrary>> =
             libraryResult
 
-        override suspend fun albums(session: AuthSession, parentId: String?): DistrictResult<List<Album>> =
-            albumsResult
+        override suspend fun albums(session: AuthSession, parentId: String?): DistrictResult<List<Album>> {
+            if (albumsDelayMs > 0L) delay(albumsDelayMs)
+            return albumsResult
+        }
 
         override suspend fun artistAlbums(session: AuthSession, artistId: String): DistrictResult<List<Album>> {
             lastArtistId = artistId
             return artistAlbumsResult
         }
 
-        override suspend fun albumTracks(session: AuthSession, albumId: String): DistrictResult<List<Track>> =
-            tracksResult
+        override suspend fun albumTracks(session: AuthSession, albumId: String): DistrictResult<List<Track>> {
+            albumTrackDelaysMs[albumId]?.let { delay(it) }
+            return albumTrackResults[albumId] ?: tracksResult
+        }
 
         override suspend fun tracksByIds(session: AuthSession, ids: List<String>): DistrictResult<List<Track>> =
             tracksByIdsResult
@@ -859,6 +1014,33 @@ class AppViewModelTest {
             error("secure storage unavailable")
         }
         override suspend fun clear() = Unit
+    }
+
+    private class ControlledSessionStore(
+        var savedSession: AuthSession?,
+        private val startupSession: AuthSession?,
+    ) : SessionStore {
+        override suspend fun load(): AuthSession? = startupSession
+        override suspend fun save(session: AuthSession) {
+            savedSession = session
+        }
+        override suspend fun clear() {
+            savedSession = null
+        }
+    }
+
+    private class SlowClearSessionStore(
+        var savedSession: AuthSession?,
+        private val clearDelayMs: Long,
+    ) : SessionStore {
+        override suspend fun load(): AuthSession? = savedSession
+        override suspend fun save(session: AuthSession) {
+            savedSession = session
+        }
+        override suspend fun clear() {
+            delay(clearDelayMs)
+            savedSession = null
+        }
     }
 
     private class FakePlaybackController : PlaybackController {

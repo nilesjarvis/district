@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -130,13 +131,14 @@ class AppViewModel(
     fun signIn() {
         val state = onboardingState() ?: return
         if (state.isLoading) return
+        val rememberDevice = state.rememberDevice
         setOnboarding { copy(isLoading = true, error = null) }
         viewModelScope.launch(dispatchers.io) {
             when (val auth = repository.authenticate(state.serverUrl, state.username, state.password)) {
                 is DistrictResult.Failure -> setOnboarding {
                     copy(isLoading = false, error = auth.error)
                 }
-                is DistrictResult.Success -> handleAuthenticated(auth.value)
+                is DistrictResult.Success -> handleAuthenticated(auth.value, rememberDevice)
             }
         }
     }
@@ -158,6 +160,8 @@ class AppViewModel(
 
     private var _lastSession: AuthSession? = null
     private var searchJob: Job? = null
+    private var albumLoadJob: Job? = null
+    private var artistLoadJob: Job? = null
     private var lastPersistedPlayback: PlaybackSnapshot? = null
 
     fun activateSearch() {
@@ -184,6 +188,7 @@ class AppViewModel(
 
     fun openAlbum(album: Album) {
         val state = libraryState() ?: return
+        albumLoadJob?.cancel()
         val localTracks = downloadManager.playableTracks(album.id)
         if (localTracks != null) {
             updateLibrary {
@@ -208,19 +213,27 @@ class AppViewModel(
                 error = null,
             )
         }
-        viewModelScope.launch(dispatchers.io) {
+        albumLoadJob = viewModelScope.launch(dispatchers.io) {
             when (val tracks = repository.albumTracks(state.session, album.id)) {
                 is DistrictResult.Failure -> {
-                    if (tracks.error == DistrictError.ExpiredToken) {
+                    if (tracks.error == DistrictError.ExpiredToken && isCurrentSession(state.session)) {
                         handleExpiredSession(state.session)
                     } else {
-                        updateLibrary {
-                            copy(isAlbumLoading = false, error = tracks.error)
+                        updateLibraryForSession(state.session) {
+                            if (route != LibraryRoute.AlbumDetail || selectedAlbum?.id != album.id) {
+                                this
+                            } else {
+                                copy(isAlbumLoading = false, error = tracks.error)
+                            }
                         }
                     }
                 }
-                is DistrictResult.Success -> updateLibrary {
-                    copy(isAlbumLoading = false, albumTracks = tracks.value)
+                is DistrictResult.Success -> updateLibraryForSession(state.session) {
+                    if (route != LibraryRoute.AlbumDetail || selectedAlbum?.id != album.id) {
+                        this
+                    } else {
+                        copy(isAlbumLoading = false, albumTracks = tracks.value, error = null)
+                    }
                 }
             }
         }
@@ -229,6 +242,7 @@ class AppViewModel(
     fun openArtist(artist: Artist) {
         if (artist.id.isBlank()) return
         val state = libraryState() ?: return
+        artistLoadJob?.cancel()
         updateLibrary {
             copy(
                 route = LibraryRoute.ArtistDetail,
@@ -239,26 +253,45 @@ class AppViewModel(
                 error = null,
             )
         }
-        viewModelScope.launch(dispatchers.io) {
+        artistLoadJob = viewModelScope.launch(dispatchers.io) {
             when (val albums = repository.artistAlbums(state.session, artist.id)) {
                 is DistrictResult.Failure -> {
-                    if (albums.error == DistrictError.ExpiredToken) {
+                    if (albums.error == DistrictError.ExpiredToken && isCurrentSession(state.session)) {
                         handleExpiredSession(state.session)
                     } else {
-                        updateLibrary {
-                            copy(isArtistLoading = false, error = albums.error)
+                        updateLibraryForSession(state.session) {
+                            if (route != LibraryRoute.ArtistDetail || selectedArtist?.id != artist.id) {
+                                this
+                            } else {
+                                copy(isArtistLoading = false, error = albums.error)
+                            }
                         }
                     }
                 }
-                is DistrictResult.Success -> updateLibrary {
-                    copy(isArtistLoading = false, artistAlbums = albums.value)
+                is DistrictResult.Success -> updateLibraryForSession(state.session) {
+                    if (selectedArtist?.id != artist.id) {
+                        this
+                    } else {
+                        copy(
+                            isArtistLoading = false,
+                            artistAlbums = albums.value,
+                            error = if (route == LibraryRoute.ArtistDetail) null else error,
+                        )
+                    }
                 }
             }
         }
     }
 
     fun backToLibrary() {
-        searchJob?.cancel()
+        val state = libraryState() ?: return
+        if (state.isOffline && state.route == LibraryRoute.Downloads && state.backStack.isEmpty()) return
+        when (state.route) {
+            LibraryRoute.Search -> searchJob?.cancel()
+            LibraryRoute.AlbumDetail -> albumLoadJob?.cancel()
+            LibraryRoute.ArtistDetail -> artistLoadJob?.cancel()
+            else -> Unit
+        }
         updateLibrary {
             copy(
                 route = backStack.lastOrNull() ?: LibraryRoute.Albums,
@@ -278,7 +311,11 @@ class AppViewModel(
 
     fun playTrack(track: Track) {
         val state = libraryState() ?: return
-        val queue = if (state.albumTracks.isNotEmpty()) state.albumTracks else state.searchResults.tracks
+        val queue = when (state.route) {
+            LibraryRoute.AlbumDetail -> state.albumTracks
+            LibraryRoute.Search -> state.searchResults.tracks
+            else -> emptyList()
+        }
         val index = queue.indexOfFirst { it.id == track.id }
         if (index >= 0) {
             playbackController.playQueue(queue, index)
@@ -326,17 +363,21 @@ class AppViewModel(
         viewModelScope.launch(dispatchers.io) { downloadManager.delete(albumId) }
     }
 
-    private suspend fun handleAuthenticated(session: AuthSession) {
+    private suspend fun handleAuthenticated(session: AuthSession, rememberDevice: Boolean) {
         when (val libraries = repository.libraries(session)) {
             is DistrictResult.Success -> {
-                val saveError = runCatching { sessionStore.save(session) }.exceptionOrNull()
-                if (saveError != null) {
+                val storageError = if (rememberDevice) {
+                    runCatching { sessionStore.save(session) }.exceptionOrNull()
+                } else {
+                    runCatching { sessionStore.clear() }.exceptionOrNull()
+                }
+                if (storageError != null) {
                     _lastSession = null
                     setOnboarding {
                         copy(
                             step = OnboardingStep.SignIn,
                             isLoading = false,
-                            error = DistrictError.Storage(saveError.message ?: "Unable to save session"),
+                            error = DistrictError.Storage(storageError.message ?: "Unable to update session storage"),
                         )
                     }
                     return
@@ -361,29 +402,29 @@ class AppViewModel(
         return when (val libraries = repository.libraries(session)) {
             is DistrictResult.Failure -> when (val error = libraries.error) {
                 DistrictError.ExpiredToken -> {
-                    handleExpiredSession(session)
+                    if (isCurrentSession(session)) handleExpiredSession(session)
                     false
                 }
                 is DistrictError.Network -> {
-                    enterOfflineMode(session)
+                    if (isCurrentSession(session)) enterOfflineMode(session)
                     false
                 }
                 else -> {
-                    _uiState.value = AppUiState.Library(
-                        baseLibraryState(session).copy(isLoading = false, error = error),
-                    )
+                    updateLibraryForSession(session) { copy(isLoading = false, error = error) }
                     true
                 }
             }
             is DistrictResult.Success -> {
-                _uiState.value = AppUiState.Library(
-                    baseLibraryState(session, isLoading = true).copy(
+                updateLibraryForSession(session) {
+                    copy(
+                        isLoading = true,
                         libraries = libraries.value,
                         selectedLibraryId = libraries.value.musicLibraryId(),
-                    ),
-                )
+                        error = null,
+                    )
+                }
                 loadAlbums(session, libraries.value)
-                _uiState.value !is AppUiState.Onboarding
+                libraryState()?.session?.sameIdentityAs(session) == true
             }
         }
     }
@@ -392,36 +433,38 @@ class AppViewModel(
         val libraryId = libraries.musicLibraryId()
         when (val albums = repository.albums(session, libraryId)) {
             is DistrictResult.Failure -> when (val error = albums.error) {
-                DistrictError.ExpiredToken -> handleExpiredSession(session)
-                is DistrictError.Network -> enterOfflineMode(session)
-                else -> _uiState.value = AppUiState.Library(
-                    baseLibraryState(session).copy(
+                DistrictError.ExpiredToken -> if (isCurrentSession(session)) handleExpiredSession(session)
+                is DistrictError.Network -> if (isCurrentSession(session)) enterOfflineMode(session)
+                else -> updateLibraryForSession(session) {
+                    copy(
                         libraries = libraries,
                         selectedLibraryId = libraryId,
                         isLoading = false,
                         error = error,
-                    ),
-                )
+                    )
+                }
             }
-            is DistrictResult.Success -> _uiState.value = AppUiState.Library(
-                baseLibraryState(session).copy(
+            is DistrictResult.Success -> updateLibraryForSession(session) {
+                copy(
                     libraries = libraries,
                     selectedLibraryId = libraryId,
                     albums = albums.value,
                     isLoading = false,
-                ),
-            )
+                    error = if (route == LibraryRoute.Albums) null else error,
+                )
+            }
         }
     }
 
     private fun enterOfflineMode(session: AuthSession) {
-        _uiState.value = AppUiState.Library(
-            baseLibraryState(session).copy(
+        updateLibraryForSession(session) {
+            copy(
                 isLoading = false,
                 isOffline = true,
                 route = LibraryRoute.Downloads,
-            ),
-        )
+                backStack = emptyList(),
+            )
+        }
     }
 
     private suspend fun restorePlayback(session: AuthSession) {
@@ -507,32 +550,43 @@ class AppViewModel(
             delay(150)
             when (val results = repository.search(session, query)) {
                 is DistrictResult.Failure -> {
-                    if (results.error == DistrictError.ExpiredToken) {
+                    if (results.error == DistrictError.ExpiredToken && isCurrentSession(session)) {
                         handleExpiredSession(session)
                     } else {
-                        updateLibrary {
-                            copy(
-                                isSearching = false,
-                                error = results.error,
-                                searchResults = SearchResults(emptyList(), emptyList(), emptyList()),
-                            )
+                        updateLibraryForSession(session) {
+                            if (route != LibraryRoute.Search || searchQuery != query) {
+                                this
+                            } else {
+                                copy(
+                                    isSearching = false,
+                                    error = results.error,
+                                    searchResults = SearchResults(emptyList(), emptyList(), emptyList()),
+                                )
+                            }
                         }
                     }
                 }
-                is DistrictResult.Success -> updateLibrary {
-                    copy(
-                        isSearching = false,
-                        searchResults = results.value,
-                        recentSearches = listOf(query) + recentSearches.filterNot { it.equals(query, ignoreCase = true) }.take(4),
-                        error = null,
-                    )
+                is DistrictResult.Success -> updateLibraryForSession(session) {
+                    if (route != LibraryRoute.Search || searchQuery != query) {
+                        this
+                    } else {
+                        copy(
+                            isSearching = false,
+                            searchResults = results.value,
+                            recentSearches = listOf(query) + recentSearches.filterNot { it.equals(query, ignoreCase = true) }.take(4),
+                            error = null,
+                        )
+                    }
                 }
             }
         }
     }
 
     private suspend fun handleExpiredSession(session: AuthSession) {
-        searchJob?.cancel()
+        val currentJob = currentCoroutineContext()[Job]
+        if (searchJob !== currentJob) searchJob?.cancel()
+        if (albumLoadJob !== currentJob) albumLoadJob?.cancel()
+        if (artistLoadJob !== currentJob) artistLoadJob?.cancel()
         _lastSession = null
         runCatching { sessionStore.clear() }
         _uiState.value = AppUiState.Onboarding(
@@ -566,9 +620,29 @@ class AppViewModel(
             AppUiState.Library(library.state.reducer())
         }
     }
+
+    private fun updateLibraryForSession(
+        session: AuthSession,
+        reducer: LibraryUiState.() -> LibraryUiState,
+    ) {
+        _uiState.update { state ->
+            val library = state as? AppUiState.Library ?: return@update state
+            if (!library.state.session.sameIdentityAs(session)) return@update state
+            AppUiState.Library(library.state.reducer())
+        }
+    }
+
+    private fun isCurrentSession(session: AuthSession): Boolean =
+        libraryState()?.session?.sameIdentityAs(session) == true
 }
 
 private fun List<MusicLibrary>.musicLibraryId(): String? =
     firstOrNull { it.collectionType.equals("music", ignoreCase = true) }?.id ?: firstOrNull()?.id
+
+private fun AuthSession.sameIdentityAs(other: AuthSession): Boolean =
+    serverUrl == other.serverUrl &&
+        accessToken == other.accessToken &&
+        userId == other.userId &&
+        deviceId == other.deviceId
 
 private const val PLAYBACK_PERSIST_INTERVAL_MS = 2_500L

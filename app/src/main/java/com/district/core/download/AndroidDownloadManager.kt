@@ -15,11 +15,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -33,6 +36,8 @@ class AndroidDownloadManager(
     private val clockMs: () -> Long = System::currentTimeMillis,
 ) : DownloadManager {
     private val downloadsDir = File(context.applicationContext.filesDir, "downloads")
+    private val catalogMutex = Mutex()
+    private val downloadJobs = mutableMapOf<String, DownloadJob>()
 
     private val _downloads = MutableStateFlow<List<DownloadedAlbum>>(emptyList())
     override val downloads: StateFlow<List<DownloadedAlbum>> = _downloads.asStateFlow()
@@ -41,13 +46,38 @@ class AndroidDownloadManager(
     override val activeDownloads: StateFlow<Map<String, DownloadState>> = _activeDownloads.asStateFlow()
 
     override suspend fun refresh() {
-        _downloads.value = store.load()
+        catalogMutex.withLock {
+            val keepActiveIds = activeAlbumIds()
+            val reconciled = withContext(ioDispatcher) {
+                val loaded = store.load()
+                val valid = loaded.mapNotNull { it.reconciledIfPlayable() }
+                cleanOrphanDirs(valid.mapTo(mutableSetOf()) { it.id } + keepActiveIds)
+                if (valid != loaded) store.save(valid)
+                valid
+            }
+            _downloads.value = reconciled
+        }
     }
 
     override fun enqueue(album: Album, tracks: List<Track>) {
         if (isDownloaded(album.id)) return
-        if (_activeDownloads.value[album.id] is DownloadState.InProgress) return
-        scope.launch { downloadInternal(album, tracks) }
+        synchronized(downloadJobs) {
+            if (downloadJobs.containsKey(album.id)) return
+            if (_activeDownloads.value[album.id] is DownloadState.InProgress) return
+            val entry = DownloadJob()
+            downloadJobs[album.id] = entry
+            entry.job = scope.launch {
+                try {
+                    downloadInternal(album, tracks)
+                } finally {
+                    synchronized(downloadJobs) {
+                        if (downloadJobs[album.id] === entry) {
+                            downloadJobs.remove(album.id)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private suspend fun downloadInternal(album: Album, tracks: List<Track>) {
@@ -91,9 +121,11 @@ class AndroidDownloadManager(
                     downloadedAtEpochMs = clockMs(),
                 )
             }
-            val updated = _downloads.value.filterNot { it.id == album.id } + downloaded
-            withContext(ioDispatcher) { store.save(updated) }
-            _downloads.value = updated
+            catalogMutex.withLock {
+                val updated = _downloads.value.filterNot { it.id == album.id } + downloaded
+                withContext(ioDispatcher) { store.save(updated) }
+                _downloads.value = updated
+            }
             _activeDownloads.update { it - album.id }
         } catch (cancellation: CancellationException) {
             withContext(ioDispatcher) { albumDir.deleteRecursively() }
@@ -117,10 +149,16 @@ class AndroidDownloadManager(
     }
 
     override suspend fun delete(albumId: String) {
-        withContext(ioDispatcher) {
-            File(downloadsDir, albumId).deleteRecursively()
-            val updated = _downloads.value.filterNot { it.id == albumId }
-            store.save(updated)
+        synchronized(downloadJobs) {
+            downloadJobs[albumId]?.job?.cancel()
+        }
+        catalogMutex.withLock {
+            val updated = withContext(ioDispatcher) {
+                File(downloadsDir, albumId).deleteRecursively()
+                val next = _downloads.value.filterNot { it.id == albumId }
+                store.save(next)
+                next
+            }
             _downloads.value = updated
         }
         _activeDownloads.update { it - albumId }
@@ -146,4 +184,29 @@ class AndroidDownloadManager(
     }
 
     private fun fileUri(path: String): String = Uri.fromFile(File(path)).toString()
+
+    private fun activeAlbumIds(): Set<String> =
+        synchronized(downloadJobs) { downloadJobs.keys.toSet() }
+
+    private fun DownloadedAlbum.reconciledIfPlayable(): DownloadedAlbum? {
+        if (!hasPlayableTrackFiles()) return null
+        val validCoverPath = coverPath?.takeIf { fileIsUsable(it) }
+        return if (validCoverPath == coverPath) this else copy(coverPath = validCoverPath)
+    }
+
+    private fun DownloadedAlbum.hasPlayableTrackFiles(): Boolean =
+        tracks.isNotEmpty() && tracks.all { fileIsUsable(it.filePath) }
+
+    private fun fileIsUsable(path: String): Boolean =
+        File(path).let { it.isFile && it.length() > 0L }
+
+    private fun cleanOrphanDirs(keepAlbumIds: Set<String>) {
+        downloadsDir.listFiles()
+            ?.filter { it.isDirectory && it.name !in keepAlbumIds }
+            ?.forEach { it.deleteRecursively() }
+    }
+
+    private class DownloadJob {
+        var job: Job? = null
+    }
 }

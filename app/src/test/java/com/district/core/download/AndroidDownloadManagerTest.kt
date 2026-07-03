@@ -3,6 +3,8 @@ package com.district.core.download
 import android.content.Context
 import com.district.core.persistence.InMemoryDownloadStore
 import com.district.domain.Album
+import com.district.domain.DownloadedAlbum
+import com.district.domain.DownloadedTrack
 import com.district.domain.RemoteResource
 import com.district.domain.Track
 import java.io.File
@@ -138,5 +140,99 @@ class AndroidDownloadManagerTest {
         advanceUntilIdle()
 
         assertEquals(1, manager.downloads.value.size)
+    }
+
+    @Test
+    fun refreshPrunesDownloadsWithMissingTrackFilesAndOrphanDirs() = runTest {
+        val missingAlbumDir = File(context.filesDir, "downloads/missing-album").apply { mkdirs() }
+        File(missingAlbumDir, "partial").writeText("partial")
+        val orphanDir = File(context.filesDir, "downloads/orphan-album")
+        orphanDir.mkdirs()
+        File(orphanDir, "orphan").writeText("stale")
+        val missing = DownloadedAlbum(
+            id = "missing-album",
+            title = "Missing",
+            artist = "Molyneux",
+            productionYear = 2024,
+            coverPath = null,
+            tracks = listOf(
+                DownloadedTrack(
+                    id = "missing-track",
+                    title = "Missing Track",
+                    artist = "Molyneux",
+                    albumId = "missing-album",
+                    indexNumber = 1,
+                    durationMs = 200_000L,
+                    filePath = File(missingAlbumDir, "missing-track").absolutePath,
+                    sizeBytes = 100L,
+                ),
+            ),
+            downloadedAtEpochMs = 10L,
+        )
+        val store = InMemoryDownloadStore(listOf(missing))
+        val manager = AndroidDownloadManager(context, OkHttpClient(), store, this, StandardTestDispatcher(testScheduler))
+
+        manager.refresh()
+
+        assertTrue(manager.downloads.value.isEmpty())
+        assertTrue(store.load().isEmpty())
+        assertEquals(null, manager.playableTracks("missing-album"))
+        assertFalse("invalid album directory must be removed", missingAlbumDir.exists())
+        assertFalse("orphan directory must be removed", orphanDir.exists())
+    }
+
+    @Test
+    fun refreshDropsMissingCoverButKeepsPlayableTracks() = runTest {
+        val albumDir = File(context.filesDir, "downloads/coverless-album").apply { mkdirs() }
+        val trackFile = File(albumDir, "track").apply { writeText("audio") }
+        val downloaded = DownloadedAlbum(
+            id = "coverless-album",
+            title = "Coverless",
+            artist = "Molyneux",
+            productionYear = 2024,
+            coverPath = File(albumDir, "missing-cover").absolutePath,
+            tracks = listOf(
+                DownloadedTrack(
+                    id = "track",
+                    title = "Track",
+                    artist = "Molyneux",
+                    albumId = "coverless-album",
+                    indexNumber = 1,
+                    durationMs = 200_000L,
+                    filePath = trackFile.absolutePath,
+                    sizeBytes = trackFile.length(),
+                ),
+            ),
+            downloadedAtEpochMs = 10L,
+        )
+        val store = InMemoryDownloadStore(listOf(downloaded))
+        val manager = AndroidDownloadManager(context, OkHttpClient(), store, this, StandardTestDispatcher(testScheduler))
+
+        manager.refresh()
+
+        val refreshed = manager.downloads.value.single()
+        assertEquals("coverless-album", refreshed.id)
+        assertEquals(null, refreshed.coverPath)
+        assertEquals(null, manager.playableTracks("coverless-album")!!.single().coverArt)
+        assertEquals(null, store.load().single().coverPath)
+    }
+
+    @Test
+    fun concurrentDownloadsBothPersistToCatalog() = runTest {
+        server.enqueue(MockResponse().setBody("first-audio"))
+        server.enqueue(MockResponse().setBody("second-audio"))
+        val store = InMemoryDownloadStore()
+        val manager = AndroidDownloadManager(context, OkHttpClient(), store, this, StandardTestDispatcher(testScheduler))
+        val firstAlbum = Album("concurrent-1", "First", "Molyneux", 2024, 1, null)
+        val secondAlbum = Album("concurrent-2", "Second", "Molyneux", 2024, 1, null)
+        val firstTracks = listOf(Track("c1-t1", "First", "Molyneux", firstAlbum.id, 1, 200_000L, RemoteResource(server.url("/audio/c1").toString(), null)))
+        val secondTracks = listOf(Track("c2-t1", "Second", "Molyneux", secondAlbum.id, 1, 200_000L, RemoteResource(server.url("/audio/c2").toString(), null)))
+
+        manager.enqueue(firstAlbum, firstTracks)
+        manager.enqueue(secondAlbum, secondTracks)
+        advanceUntilIdle()
+
+        assertEquals(listOf("concurrent-1", "concurrent-2"), manager.downloads.value.map { it.id }.sorted())
+        assertEquals(listOf("concurrent-1", "concurrent-2"), store.load().map { it.id }.sorted())
     }
 }
