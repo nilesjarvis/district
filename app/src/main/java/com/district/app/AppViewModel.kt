@@ -2,6 +2,8 @@ package com.district.app
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.district.core.download.DownloadManager
+import com.district.core.download.toAlbum
 import com.district.core.media.PlaybackController
 import com.district.core.media.PlayerState
 import com.district.core.network.DefaultDispatcherProvider
@@ -12,6 +14,7 @@ import com.district.domain.Artist
 import com.district.domain.AuthSession
 import com.district.domain.Album
 import com.district.domain.DistrictError
+import com.district.domain.DownloadedAlbum
 import com.district.domain.DistrictResult
 import com.district.domain.JellyfinRepository
 import com.district.domain.MusicLibrary
@@ -37,6 +40,7 @@ class AppViewModel(
     private val sessionStore: SessionStore,
     private val playbackStore: PlaybackStore,
     private val playbackController: PlaybackController,
+    private val downloadManager: DownloadManager,
     private val dispatchers: DispatcherProvider = DefaultDispatcherProvider,
     private val clockMs: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
@@ -54,15 +58,30 @@ class AppViewModel(
                 }
             }
         }
+        viewModelScope.launch(dispatchers.main) {
+            downloadManager.downloads.collect { list -> updateLibrary { copy(downloads = list) } }
+        }
+        viewModelScope.launch(dispatchers.main) {
+            downloadManager.activeDownloads.collect { states -> updateLibrary { copy(downloadStates = states) } }
+        }
         viewModelScope.launch(dispatchers.io) {
+            downloadManager.refresh()
             sessionStore.load()?.let { session ->
-                _uiState.value = AppUiState.Library(LibraryUiState(session = session, isLoading = true))
+                _uiState.value = AppUiState.Library(baseLibraryState(session, isLoading = true))
                 if (loadLibrary(session)) {
                     restorePlayback(session)
                 }
             }
         }
     }
+
+    private fun baseLibraryState(session: AuthSession, isLoading: Boolean = false): LibraryUiState =
+        LibraryUiState(
+            session = session,
+            isLoading = isLoading,
+            downloads = downloadManager.downloads.value,
+            downloadStates = downloadManager.activeDownloads.value,
+        )
 
     fun connectServer() {
         setOnboarding { copy(step = OnboardingStep.Server, error = null) }
@@ -127,11 +146,9 @@ class AppViewModel(
         val session = _lastSession ?: return
         val libraries = state?.libraries.orEmpty()
         _uiState.value = AppUiState.Library(
-            LibraryUiState(
-                session = session,
+            baseLibraryState(session, isLoading = true).copy(
                 libraries = libraries,
                 selectedLibraryId = libraries.musicLibraryId(),
-                isLoading = true,
             ),
         )
         viewModelScope.launch(dispatchers.io) {
@@ -167,6 +184,20 @@ class AppViewModel(
 
     fun openAlbum(album: Album) {
         val state = libraryState() ?: return
+        val localTracks = downloadManager.playableTracks(album.id)
+        if (localTracks != null) {
+            updateLibrary {
+                copy(
+                    route = LibraryRoute.AlbumDetail,
+                    backStack = backStack + route,
+                    selectedAlbum = album,
+                    albumTracks = localTracks,
+                    isAlbumLoading = false,
+                    error = null,
+                )
+            }
+            return
+        }
         updateLibrary {
             copy(
                 route = LibraryRoute.AlbumDetail,
@@ -262,6 +293,39 @@ class AppViewModel(
     fun seekToFraction(fraction: Float) = playbackController.seekToFraction(fraction)
     fun setVolumeFraction(fraction: Float) = playbackController.setVolumeFraction(fraction)
 
+    fun openDownloads() {
+        updateLibrary {
+            if (route == LibraryRoute.Downloads) this
+            else copy(route = LibraryRoute.Downloads, backStack = backStack + route, error = null)
+        }
+    }
+
+    fun openDownloadedAlbum(album: DownloadedAlbum) {
+        val tracks = downloadManager.playableTracks(album.id) ?: return
+        updateLibrary {
+            copy(
+                route = LibraryRoute.AlbumDetail,
+                backStack = backStack + route,
+                selectedAlbum = album.toAlbum(),
+                albumTracks = tracks,
+                isAlbumLoading = false,
+                error = null,
+            )
+        }
+    }
+
+    fun downloadSelectedAlbum() {
+        val state = libraryState() ?: return
+        val album = state.selectedAlbum ?: return
+        if (state.albumTracks.isEmpty()) return
+        if (downloadManager.isDownloaded(album.id)) return
+        downloadManager.enqueue(album, state.albumTracks)
+    }
+
+    fun deleteDownload(albumId: String) {
+        viewModelScope.launch(dispatchers.io) { downloadManager.delete(albumId) }
+    }
+
     private suspend fun handleAuthenticated(session: AuthSession) {
         when (val libraries = repository.libraries(session)) {
             is DistrictResult.Success -> {
@@ -295,24 +359,27 @@ class AppViewModel(
 
     private suspend fun loadLibrary(session: AuthSession): Boolean {
         return when (val libraries = repository.libraries(session)) {
-            is DistrictResult.Failure -> {
-                if (libraries.error == DistrictError.ExpiredToken) {
+            is DistrictResult.Failure -> when (val error = libraries.error) {
+                DistrictError.ExpiredToken -> {
                     handleExpiredSession(session)
                     false
-                } else {
+                }
+                is DistrictError.Network -> {
+                    enterOfflineMode(session)
+                    false
+                }
+                else -> {
                     _uiState.value = AppUiState.Library(
-                        LibraryUiState(session = session, isLoading = false, error = libraries.error),
+                        baseLibraryState(session).copy(isLoading = false, error = error),
                     )
                     true
                 }
             }
             is DistrictResult.Success -> {
                 _uiState.value = AppUiState.Library(
-                    LibraryUiState(
-                        session = session,
+                    baseLibraryState(session, isLoading = true).copy(
                         libraries = libraries.value,
                         selectedLibraryId = libraries.value.musicLibraryId(),
-                        isLoading = true,
                     ),
                 )
                 loadAlbums(session, libraries.value)
@@ -324,24 +391,20 @@ class AppViewModel(
     private suspend fun loadAlbums(session: AuthSession, libraries: List<MusicLibrary>) {
         val libraryId = libraries.musicLibraryId()
         when (val albums = repository.albums(session, libraryId)) {
-            is DistrictResult.Failure -> {
-                if (albums.error == DistrictError.ExpiredToken) {
-                    handleExpiredSession(session)
-                } else {
-                    _uiState.value = AppUiState.Library(
-                        LibraryUiState(
-                            session = session,
-                            libraries = libraries,
-                            selectedLibraryId = libraryId,
-                            isLoading = false,
-                            error = albums.error,
-                        ),
-                    )
-                }
+            is DistrictResult.Failure -> when (val error = albums.error) {
+                DistrictError.ExpiredToken -> handleExpiredSession(session)
+                is DistrictError.Network -> enterOfflineMode(session)
+                else -> _uiState.value = AppUiState.Library(
+                    baseLibraryState(session).copy(
+                        libraries = libraries,
+                        selectedLibraryId = libraryId,
+                        isLoading = false,
+                        error = error,
+                    ),
+                )
             }
             is DistrictResult.Success -> _uiState.value = AppUiState.Library(
-                LibraryUiState(
-                    session = session,
+                baseLibraryState(session).copy(
                     libraries = libraries,
                     selectedLibraryId = libraryId,
                     albums = albums.value,
@@ -349,6 +412,16 @@ class AppViewModel(
                 ),
             )
         }
+    }
+
+    private fun enterOfflineMode(session: AuthSession) {
+        _uiState.value = AppUiState.Library(
+            baseLibraryState(session).copy(
+                isLoading = false,
+                isOffline = true,
+                route = LibraryRoute.Downloads,
+            ),
+        )
     }
 
     private suspend fun restorePlayback(session: AuthSession) {

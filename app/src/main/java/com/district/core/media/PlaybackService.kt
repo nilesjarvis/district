@@ -9,6 +9,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -25,13 +26,16 @@ class PlaybackService : MediaSessionService() {
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
         // Headers are attached per data source so a re-login mid-queue picks up the new token,
         // and cross-protocol redirects stay disabled so the token cannot leak to another origin.
-        val dataSourceFactory = DataSource.Factory {
+        val httpFactory = DataSource.Factory {
             httpDataSourceFactory.createDataSource().apply {
                 PlaybackSessionBridge.streamHeaders().forEach { (name, value) ->
                     setRequestProperty(name, value)
                 }
             }
         }
+        // DefaultDataSource routes file:// (downloaded tracks) to the local file reader and
+        // everything else to the authenticated HTTP factory, so offline playback just works.
+        val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setAudioAttributes(

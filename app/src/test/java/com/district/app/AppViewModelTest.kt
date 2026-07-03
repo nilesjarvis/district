@@ -2,7 +2,12 @@ package com.district.app
 
 import com.district.core.network.TestDispatcherProvider
 import com.district.core.media.PlaybackController
+import com.district.core.download.DownloadManager
 import com.district.core.media.PlayerState
+import com.district.domain.DownloadState
+import com.district.domain.DownloadedAlbum
+import com.district.domain.DownloadedTrack
+import com.district.domain.RemoteResource
 import com.district.core.persistence.InMemoryPlaybackStore
 import com.district.core.persistence.InMemorySessionStore
 import com.district.core.persistence.SessionStore
@@ -640,11 +645,119 @@ class AppViewModelTest {
         assertEquals(LibraryRoute.Albums, (viewModel.uiState.value as AppUiState.Library).state.route)
     }
 
+    @Test
+    fun downloadSelectedAlbumEnqueuesLoadedTracks() = runTest {
+        val album = Album("album-1", "Ghost Notes", "Molyneux", 2024, 2, null)
+        val first = Track("track-1", "First", "Molyneux", "album-1", 1, 200000L, null)
+        val second = Track("track-2", "Second", "Molyneux", "album-1", 2, 220000L, null)
+        val downloadManager = FakeDownloadManager()
+        val viewModel = viewModel(
+            repository = FakeRepository(tracksResult = DistrictResult.Success(listOf(first, second))),
+            downloadManager = downloadManager,
+        )
+        viewModel.connectServer()
+        viewModel.checkServer()
+        viewModel.signIn()
+        viewModel.enterLibrary()
+        viewModel.openAlbum(album)
+
+        viewModel.downloadSelectedAlbum()
+
+        assertEquals("album-1", downloadManager.enqueuedAlbumId)
+        assertEquals(2, downloadManager.enqueuedTrackCount)
+    }
+
+    @Test
+    fun networkFailureOnStartupEntersOfflineDownloadsMode() = runTest {
+        val session = AuthSession("http://server", "token", "user", "demo", "device")
+        val downloadManager = FakeDownloadManager(initialDownloads = listOf(downloadedAlbum()))
+        val viewModel = viewModel(
+            repository = FakeRepository(libraryResult = DistrictResult.Failure(DistrictError.Network("unreachable"))),
+            sessionStore = InMemorySessionStore(session),
+            downloadManager = downloadManager,
+        )
+
+        val state = (viewModel.uiState.value as AppUiState.Library).state
+        assertTrue(state.isOffline)
+        assertEquals(LibraryRoute.Downloads, state.route)
+        assertEquals(listOf("album-1"), state.downloads.map { it.id })
+    }
+
+    @Test
+    fun openDownloadsNavigatesToDownloadsRoute() = runTest {
+        val viewModel = viewModel()
+        viewModel.connectServer()
+        viewModel.checkServer()
+        viewModel.signIn()
+        viewModel.enterLibrary()
+
+        viewModel.openDownloads()
+
+        assertEquals(LibraryRoute.Downloads, (viewModel.uiState.value as AppUiState.Library).state.route)
+    }
+
+    @Test
+    fun openDownloadedAlbumShowsLocalFileTracks() = runTest {
+        val downloadManager = FakeDownloadManager(initialDownloads = listOf(downloadedAlbum()))
+        val viewModel = viewModel(downloadManager = downloadManager)
+        viewModel.connectServer()
+        viewModel.checkServer()
+        viewModel.signIn()
+        viewModel.enterLibrary()
+
+        viewModel.openDownloadedAlbum(downloadedAlbum())
+
+        val state = (viewModel.uiState.value as AppUiState.Library).state
+        assertEquals(LibraryRoute.AlbumDetail, state.route)
+        assertEquals(listOf("t1"), state.albumTracks.map { it.id })
+        assertTrue(state.albumTracks.first().stream!!.url.startsWith("file://"))
+    }
+
+    @Test
+    fun openAlbumUsesLocalTracksWhenDownloaded() = runTest {
+        // Repository would return no tracks; the local (downloaded) tracks must win.
+        val downloadManager = FakeDownloadManager(initialDownloads = listOf(downloadedAlbum()))
+        val viewModel = viewModel(downloadManager = downloadManager)
+        viewModel.connectServer()
+        viewModel.checkServer()
+        viewModel.signIn()
+        viewModel.enterLibrary()
+
+        viewModel.openAlbum(Album("album-1", "Ghost Notes", "Molyneux", 2024, 1, null))
+
+        val state = (viewModel.uiState.value as AppUiState.Library).state
+        assertEquals(listOf("t1"), state.albumTracks.map { it.id })
+        assertFalse(state.isAlbumLoading)
+    }
+
+    @Test
+    fun deleteDownloadDelegatesToManager() = runTest {
+        val downloadManager = FakeDownloadManager(initialDownloads = listOf(downloadedAlbum()))
+        val viewModel = viewModel(downloadManager = downloadManager)
+
+        viewModel.deleteDownload("album-1")
+
+        assertEquals("album-1", downloadManager.deletedAlbumId)
+    }
+
+    private fun downloadedAlbum() = DownloadedAlbum(
+        id = "album-1",
+        title = "Ghost Notes",
+        artist = "Molyneux",
+        productionYear = 2024,
+        coverPath = null,
+        tracks = listOf(
+            DownloadedTrack("t1", "First", "Molyneux", "album-1", 1, 200000L, "/downloads/album-1/t1", 1_000L),
+        ),
+        downloadedAtEpochMs = 55L,
+    )
+
     private fun viewModel(
         repository: FakeRepository = FakeRepository(),
         sessionStore: SessionStore = InMemorySessionStore(),
         playbackStore: InMemoryPlaybackStore = InMemoryPlaybackStore(),
         playbackController: FakePlaybackController = FakePlaybackController(),
+        downloadManager: FakeDownloadManager = FakeDownloadManager(),
         dispatcher: CoroutineDispatcher = Dispatchers.Unconfined,
         clockMs: () -> Long = { 1L },
     ) = AppViewModel(
@@ -652,9 +765,44 @@ class AppViewModelTest {
         sessionStore = sessionStore,
         playbackStore = playbackStore,
         playbackController = playbackController,
+        downloadManager = downloadManager,
         dispatchers = TestDispatcherProvider(dispatcher),
         clockMs = clockMs,
     )
+
+    private class FakeDownloadManager(
+        initialDownloads: List<DownloadedAlbum> = emptyList(),
+    ) : DownloadManager {
+        private val _downloads = MutableStateFlow(initialDownloads)
+        override val downloads: StateFlow<List<DownloadedAlbum>> = _downloads
+        private val _active = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
+        override val activeDownloads: StateFlow<Map<String, DownloadState>> = _active
+
+        var enqueuedAlbumId: String? = null
+        var enqueuedTrackCount: Int = 0
+        var deletedAlbumId: String? = null
+
+        override suspend fun refresh() {}
+
+        override fun enqueue(album: Album, tracks: List<Track>) {
+            enqueuedAlbumId = album.id
+            enqueuedTrackCount = tracks.size
+        }
+
+        override suspend fun delete(albumId: String) {
+            deletedAlbumId = albumId
+            _downloads.value = _downloads.value.filterNot { it.id == albumId }
+        }
+
+        override fun isDownloaded(albumId: String): Boolean = _downloads.value.any { it.id == albumId }
+
+        override fun playableTracks(albumId: String): List<Track>? {
+            val album = _downloads.value.firstOrNull { it.id == albumId } ?: return null
+            return album.tracks.map { t ->
+                Track(t.id, t.title, t.artist, t.albumId, t.indexNumber, t.durationMs, RemoteResource("file://${t.filePath}", null))
+            }
+        }
+    }
 
     private class FakeRepository(
         private val serverResult: DistrictResult<ServerInfo> = DistrictResult.Success(ServerInfo("http://192.168.1.50:8096", "LAN", "10.9.6")),

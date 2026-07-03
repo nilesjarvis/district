@@ -4,6 +4,8 @@ import com.district.domain.Artist
 import com.district.domain.AuthSession
 import com.district.domain.Album
 import com.district.domain.DistrictError
+import com.district.domain.DownloadState
+import com.district.domain.DownloadedAlbum
 import com.district.domain.MusicLibrary
 import com.district.domain.SearchResults
 import com.district.domain.Track
@@ -35,6 +37,9 @@ data class LibraryUiState(
     val isLoading: Boolean = false,
     val error: DistrictError? = null,
     val playerState: PlayerState = PlayerState(),
+    val downloads: List<DownloadedAlbum> = emptyList(),
+    val downloadStates: Map<String, DownloadState> = emptyMap(),
+    val isOffline: Boolean = false,
 )
 
 enum class LibraryRoute {
@@ -42,4 +47,5 @@ enum class LibraryRoute {
     Search,
     AlbumDetail,
     ArtistDetail,
+    Downloads,
 }

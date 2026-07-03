@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -99,6 +101,8 @@ import com.district.core.design.UpperLabel
 import com.district.domain.Album
 import com.district.domain.Artist
 import com.district.domain.DistrictError
+import com.district.domain.DownloadState
+import com.district.domain.DownloadedAlbum
 import com.district.domain.SearchResults
 import com.district.domain.Track
 import com.district.core.media.DetentHapticGate
@@ -130,6 +134,10 @@ fun DistrictApp(viewModel: AppViewModel) {
             updateSearchQuery = viewModel::updateSearchQuery,
             openAlbum = viewModel::openAlbum,
             openArtist = viewModel::openArtist,
+            openDownloads = viewModel::openDownloads,
+            openDownloadedAlbum = viewModel::openDownloadedAlbum,
+            downloadSelectedAlbum = viewModel::downloadSelectedAlbum,
+            deleteDownload = viewModel::deleteDownload,
             backToLibrary = viewModel::backToLibrary,
             playAlbumFromStart = viewModel::playAlbumFromStart,
             playTrack = viewModel::playTrack,
@@ -180,6 +188,10 @@ data class AppActions(
     val previousTrack: () -> Unit = {},
     val seekToFraction: (Float) -> Unit = {},
     val setVolumeFraction: (Float) -> Unit = {},
+    val openDownloads: () -> Unit = {},
+    val openDownloadedAlbum: (DownloadedAlbum) -> Unit = {},
+    val downloadSelectedAlbum: () -> Unit = {},
+    val deleteDownload: (String) -> Unit = {},
 )
 
 @Composable
@@ -556,6 +568,7 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
                 LibraryRoute.Search -> SearchResultsRegion(state, actions)
                 LibraryRoute.AlbumDetail -> AlbumDetailRegion(state, actions, albumDetailGridState)
                 LibraryRoute.ArtistDetail -> ArtistDetailRegion(state, actions)
+                LibraryRoute.Downloads -> DownloadsRegion(state, actions)
             }
         },
         nowPlaying = { NowPlayingFromState(state, actions) },
@@ -618,6 +631,17 @@ private fun LibraryTopBar(state: LibraryUiState, actions: AppActions) {
             Spacer(Modifier.weight(1f))
             UpperLabel("BACK", color = MonoTokens.Mut2)
         }
+        LibraryRoute.Downloads -> Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (state.backStack.isNotEmpty()) Modifier.clickable(onClick = actions.backToLibrary) else Modifier)
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            UpperLabel(if (state.backStack.isNotEmpty()) "< DOWNLOADS" else "DOWNLOADS", color = MonoTokens.Ink)
+            Spacer(Modifier.weight(1f))
+            if (state.isOffline) UpperLabel("OFFLINE", color = MonoTokens.Accent) else UpperLabel("BACK", color = MonoTokens.Mut2)
+        }
         LibraryRoute.Albums -> Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -626,6 +650,8 @@ private fun LibraryTopBar(state: LibraryUiState, actions: AppActions) {
         ) {
             UpperLabel("DISTRICT|LIB", color = MonoTokens.Ink)
             Spacer(Modifier.weight(1f))
+            DownloadsIconButton(onClick = actions.openDownloads)
+            Spacer(Modifier.width(6.dp))
             SearchIconButton(onClick = actions.activateSearch)
         }
     }
@@ -921,6 +947,11 @@ private fun AlbumDetailRegion(state: LibraryUiState, actions: AppActions, gridSt
                     .height(44.dp)
                     .fillMaxWidth(), onClick = actions.playAlbumFromStart)
             }
+            if (state.albumTracks.isNotEmpty()) {
+                item(span = { GridItemSpan(2) }) {
+                    AlbumDownloadControl(state, album, actions)
+                }
+            }
         }
         if (state.error != null) {
             item(span = { GridItemSpan(2) }) {
@@ -1028,6 +1059,192 @@ private fun ArtistDetailRegion(state: LibraryUiState, actions: AppActions) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun AlbumDownloadControl(state: LibraryUiState, album: Album, actions: AppActions) {
+    val active = state.downloadStates[album.id]
+    val isDownloaded = state.downloads.any { it.id == album.id }
+    when {
+        active is DownloadState.InProgress -> Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .testTag("download-control")
+                .background(MonoTokens.Panel)
+                .border(1.dp, MonoTokens.Line),
+            contentAlignment = Alignment.Center,
+        ) {
+            UpperLabel("DOWNLOADING ${active.completedTracks}/${active.totalTracks}", color = MonoTokens.Accent)
+        }
+        isDownloaded -> Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .testTag("download-control"),
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(MonoTokens.Panel)
+                    .border(1.dp, MonoTokens.Line),
+                contentAlignment = Alignment.Center,
+            ) {
+                UpperLabel("DOWNLOADED", color = MonoTokens.Ok)
+            }
+            MonoButton(
+                "DELETE",
+                modifier = Modifier.weight(1f).testTag("download-delete"),
+                onClick = { actions.deleteDownload(album.id) },
+            )
+        }
+        active is DownloadState.Failed -> MonoButton(
+            "RETRY DOWNLOAD",
+            modifier = Modifier.fillMaxWidth().height(44.dp).testTag("download-control"),
+            onClick = actions.downloadSelectedAlbum,
+        )
+        else -> MonoButton(
+            "DOWNLOAD ALBUM",
+            modifier = Modifier.fillMaxWidth().height(44.dp).testTag("download-control"),
+            onClick = actions.downloadSelectedAlbum,
+        )
+    }
+}
+
+@Composable
+private fun DownloadsRegion(state: LibraryUiState, actions: AppActions) {
+    val downloads = state.downloads.sortedByDescending { it.downloadedAtEpochMs }
+    val totalBytes = downloads.sumOf { it.sizeBytes }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(1),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("downloads-region")
+            .background(MonoTokens.Line)
+            .border(1.dp, MonoTokens.Line),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MonoTokens.Panel)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                UpperLabel("DOWNLOADS", color = MonoTokens.Mut2)
+                Text(
+                    text = "${downloads.size} ${if (downloads.size == 1) "ALBUM" else "ALBUMS"} - ${formatBytes(totalBytes)}",
+                    color = MonoTokens.Ink,
+                    fontFamily = JetBrainsMono,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                )
+                if (state.isOffline) UpperLabel("PLAYING FROM DEVICE STORAGE", color = MonoTokens.Mut)
+            }
+        }
+        if (downloads.isEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .background(MonoTokens.Bg),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    UpperLabel("NO DOWNLOADS", color = MonoTokens.Mut, fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Open an album and tap Download to listen offline.",
+                        color = MonoTokens.Mut2,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+        items(downloads) { album ->
+            DownloadRow(
+                album = album,
+                onOpen = { actions.openDownloadedAlbum(album) },
+                onDelete = { actions.deleteDownload(album.id) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun DownloadRow(album: DownloadedAlbum, onOpen: () -> Unit, onDelete: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .testTag("download-${album.id}")
+            .background(MonoTokens.Panel)
+            .clickable(onClick = onOpen)
+            .padding(start = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = album.title,
+                color = MonoTokens.Ink,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Medium,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            UpperLabel("${album.trackCount} ${if (album.trackCount == 1) "TRACK" else "TRACKS"} - ${formatBytes(album.sizeBytes)}", color = MonoTokens.Mut2, fontSize = 8.sp)
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .defaultMinSize(minWidth = 68.dp)
+                .testTag("download-delete-${album.id}")
+                .clickable(onClick = onDelete),
+            contentAlignment = Alignment.Center,
+        ) {
+            UpperLabel("DELETE", color = MonoTokens.Accent)
+        }
+    }
+}
+
+@Composable
+private fun DownloadsIconButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(46.dp)
+            .semantics { contentDescription = "Downloads" }
+            .testTag("downloads-action")
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(18.dp)) {
+            val w = size.width
+            val h = size.height
+            val stroke = 2.dp.toPx()
+            drawLine(MonoTokens.Ink, Offset(w * 0.5f, h * 0.12f), Offset(w * 0.5f, h * 0.62f), stroke, cap = StrokeCap.Round)
+            drawLine(MonoTokens.Ink, Offset(w * 0.28f, h * 0.42f), Offset(w * 0.5f, h * 0.66f), stroke, cap = StrokeCap.Round)
+            drawLine(MonoTokens.Ink, Offset(w * 0.72f, h * 0.42f), Offset(w * 0.5f, h * 0.66f), stroke, cap = StrokeCap.Round)
+            drawLine(MonoTokens.Ink, Offset(w * 0.24f, h * 0.86f), Offset(w * 0.76f, h * 0.86f), stroke, cap = StrokeCap.Round)
+        }
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0L) return "0 MB"
+    val mb = bytes / (1024.0 * 1024.0)
+    return when {
+        mb >= 1024.0 -> String.format(java.util.Locale.US, "%.1f GB", mb / 1024.0)
+        mb >= 10.0 -> "${mb.toInt()} MB"
+        else -> String.format(java.util.Locale.US, "%.1f MB", mb)
     }
 }
 

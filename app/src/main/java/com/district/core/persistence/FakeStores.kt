@@ -1,6 +1,7 @@
 package com.district.core.persistence
 
 import com.district.domain.AuthSession
+import com.district.domain.DownloadedAlbum
 import com.district.domain.PlaybackSnapshot
 
 class InMemorySessionStore(initial: AuthSession? = null) : SessionStore {
@@ -24,5 +25,14 @@ class InMemoryPlaybackStore(initial: PlaybackSnapshot? = null) : PlaybackStore {
     }
     override suspend fun clear() {
         snapshot = null
+    }
+}
+
+class InMemoryDownloadStore(initial: List<DownloadedAlbum> = emptyList()) : DownloadStore {
+    private var albums: List<DownloadedAlbum> = initial
+
+    override suspend fun load(): List<DownloadedAlbum> = albums
+    override suspend fun save(albums: List<DownloadedAlbum>) {
+        this.albums = albums
     }
 }
