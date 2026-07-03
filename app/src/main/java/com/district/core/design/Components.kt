@@ -24,7 +24,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -203,6 +206,8 @@ fun MonoNowPlayingBar(
     duration: String,
     coverColor: Color,
     tintColor: Color = coverColor,
+    isPlaying: Boolean = false,
+    isError: Boolean = false,
     modifier: Modifier = Modifier,
     cover: (@Composable () -> Unit)? = null,
     onTitleClick: (() -> Unit)? = null,
@@ -241,7 +246,7 @@ fun MonoNowPlayingBar(
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                UpperLabel("$code - NOW", color = MonoTokens.Mut2, fontSize = 8.sp)
+                UpperLabel("$code - NOW", color = if (isError) MonoTokens.Accent else MonoTokens.Mut2, fontSize = 8.sp)
                 Text(
                     text = title,
                     color = MonoTokens.Ink,
@@ -252,30 +257,49 @@ fun MonoNowPlayingBar(
                 )
                 Text(
                     text = artist,
-                    color = MonoTokens.Mut,
+                    color = if (isError) MonoTokens.Accent else MonoTokens.Mut,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontSize = 10.sp,
                 )
             }
         }
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .defaultMinSize(minWidth = ShellMetrics.MinTouchTarget)
-                .then(
-                    if (onActionClick != null) {
-                        Modifier
-                            .testTag("now-playing-toggle")
-                            .clickable(onClick = onActionClick)
-                    } else {
-                        Modifier
-                    },
-                )
-                .padding(horizontal = 10.dp),
-            contentAlignment = Alignment.CenterEnd,
-        ) {
-            UpperLabel("$elapsed\n$duration", color = MonoTokens.Mut, fontSize = 8.sp)
+        Column(horizontalAlignment = Alignment.End) {
+            UpperLabel(elapsed, color = if (isError) MonoTokens.Accent else MonoTokens.Mut, fontSize = 8.sp)
+            UpperLabel(duration, color = if (isError) MonoTokens.Accent else MonoTokens.Mut2, fontSize = 8.sp)
+        }
+        if (onActionClick != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .defaultMinSize(minWidth = ShellMetrics.MinTouchTarget)
+                    .testTag("now-playing-toggle")
+                    .clickable(onClick = onActionClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                PlayPauseGlyph(isPlaying = isPlaying, color = MonoTokens.Ink)
+            }
+        } else {
+            Spacer(Modifier.width(10.dp))
+        }
+    }
+}
+
+@Composable
+private fun PlayPauseGlyph(isPlaying: Boolean, color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(15.dp)) {
+        if (isPlaying) {
+            val barWidth = size.width * 0.28f
+            drawRect(color = color, topLeft = Offset(size.width * 0.16f, 0f), size = Size(barWidth, size.height))
+            drawRect(color = color, topLeft = Offset(size.width * 0.56f, 0f), size = Size(barWidth, size.height))
+        } else {
+            val path = Path().apply {
+                moveTo(size.width * 0.2f, 0f)
+                lineTo(size.width * 0.2f, size.height)
+                lineTo(size.width * 0.92f, size.height / 2f)
+                close()
+            }
+            drawPath(path, color)
         }
     }
 }

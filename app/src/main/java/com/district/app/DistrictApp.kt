@@ -49,6 +49,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -231,11 +233,11 @@ private fun WelcomeStep(state: OnboardingUiState, actions: AppActions) {
                     .border(1.dp, MonoTokens.Line2),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("JF", color = MonoTokens.Ink, fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("DT", color = MonoTokens.Ink, fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
             Spacer(Modifier.height(18.dp))
-            Text("JELLYFIN", color = MonoTokens.Ink, fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-            UpperLabel("MONO CLIENT", color = MonoTokens.Mut)
+            Text("DISTRICT", color = MonoTokens.Ink, fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+            UpperLabel("JELLYFIN CLIENT", color = MonoTokens.Mut)
             Spacer(Modifier.height(28.dp))
             Text(
                 text = "A quiet, tile-based player for your own Jellyfin library.",
@@ -430,8 +432,9 @@ private fun MonoInput(
     keyboardType: KeyboardType = KeyboardType.Text,
     visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
+    var focused by remember { mutableStateOf(false) }
     Column(modifier) {
-        UpperLabel(label, color = MonoTokens.Mut2)
+        UpperLabel(label, color = if (focused) MonoTokens.Accent else MonoTokens.Mut2)
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -447,7 +450,8 @@ private fun MonoInput(
                 .fillMaxWidth()
                 .height(46.dp)
                 .background(MonoTokens.Panel)
-                .border(1.dp, MonoTokens.Accent)
+                .border(1.dp, if (focused) MonoTokens.Accent else MonoTokens.Line2)
+                .onFocusChanged { focused = it.isFocused }
                 .padding(horizontal = 10.dp, vertical = 14.dp),
         )
     }
@@ -620,7 +624,7 @@ private fun LibraryTopBar(state: LibraryUiState, actions: AppActions) {
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            UpperLabel("JELLYFIN|LIB", color = MonoTokens.Ink)
+            UpperLabel("DISTRICT|LIB", color = MonoTokens.Ink)
             Spacer(Modifier.weight(1f))
             SearchIconButton(onClick = actions.activateSearch)
         }
@@ -668,6 +672,28 @@ private fun SearchGlyph(color: Color) {
 
 @Composable
 private fun LibraryAlbumGrid(state: LibraryUiState, actions: AppActions, gridState: LazyGridState) {
+    if (!state.isLoading && state.error == null && state.albums.isEmpty()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MonoTokens.Bg)
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            UpperLabel("NO ALBUMS", color = MonoTokens.Mut, fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "This music library is empty.\nAdd albums on your Jellyfin server.",
+                color = MonoTokens.Mut2,
+                fontFamily = JetBrainsMono,
+                fontSize = 11.sp,
+                lineHeight = 18.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
+        return
+    }
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         state = gridState,
@@ -695,19 +721,6 @@ private fun LibraryAlbumGrid(state: LibraryUiState, actions: AppActions, gridSta
         if (state.error != null) {
             item(span = { GridItemSpan(2) }) {
                 StateTile(state.error.label(), color = MonoTokens.Accent)
-            }
-        }
-        if (!state.isLoading && state.error == null && state.albums.isEmpty()) {
-            item(span = { GridItemSpan(2) }) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(96.dp)
-                        .background(MonoTokens.Panel),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    UpperLabel("NO ALBUMS", color = MonoTokens.Mut)
-                }
             }
         }
         itemsIndexed(state.albums) { index, album ->
@@ -1189,6 +1202,8 @@ private fun NowPlayingFromState(state: LibraryUiState, actions: AppActions) {
         },
         elapsed = playerState.positionMs.formatDuration(),
         duration = playerState.durationMs.formatDuration(),
+        isPlaying = playerState.isPlaying,
+        isError = error != null,
         coverColor = sampledTint,
         tintColor = sampledTint,
         modifier = Modifier
@@ -1252,8 +1267,6 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions) {
     ) {
         InteractiveRuler(
             fraction = progress,
-            elapsed = playerState.positionMs.formatDuration(),
-            duration = playerState.durationMs.formatDuration(),
             onChange = { fraction ->
                 if (scrubGate.shouldFire(fraction)) {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1299,7 +1312,7 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions) {
 }
 
 @Composable
-private fun InteractiveRuler(fraction: Float, elapsed: String, duration: String, onChange: (Float) -> Unit) {
+private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
     val clamped = fraction.coerceIn(0f, 1f)
     Box(
         modifier = Modifier
@@ -1367,16 +1380,6 @@ private fun InteractiveRuler(fraction: Float, elapsed: String, duration: String,
                 end = Offset(playhead, h),
                 strokeWidth = 2.dp.toPx(),
             )
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            UpperLabel(elapsed, color = MonoTokens.Ink, fontSize = 8.sp)
-            Spacer(Modifier.weight(1f))
-            UpperLabel(duration, color = MonoTokens.Ink, fontSize = 8.sp)
         }
     }
 }
