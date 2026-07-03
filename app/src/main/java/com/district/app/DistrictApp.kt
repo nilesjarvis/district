@@ -1479,7 +1479,7 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions) {
             .fillMaxSize()
             .background(MonoTokens.Panel)
             .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         InteractiveRuler(
             fraction = progress,
