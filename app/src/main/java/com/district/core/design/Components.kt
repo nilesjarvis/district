@@ -307,6 +307,7 @@ private fun PlayPauseGlyph(isPlaying: Boolean, color: Color, modifier: Modifier 
 @Composable
 fun MonoScrubPreview(
     progress: Float,
+    tintColor: Color = MonoTokens.CoverBlue,
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(
@@ -331,7 +332,7 @@ fun MonoScrubPreview(
             modifier = Modifier
                 .fillMaxHeight()
                 .width(maxWidth * progress.coerceIn(0f, 1f))
-                .background(MonoTokens.Accent.copy(alpha = 0.22f)),
+                .background(coverTint(tintColor, alpha = 0.48f)),
         )
         Box(
             modifier = Modifier

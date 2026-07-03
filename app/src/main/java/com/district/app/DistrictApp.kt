@@ -1421,9 +1421,9 @@ private fun rememberPlayerTint(playerState: PlayerState): Color {
         val bitmap = (result?.drawable as? BitmapDrawable)?.bitmap ?: return@LaunchedEffect
         val palette = Palette.from(bitmap).generate()
         val sampled = listOf(
-            palette.getVibrantColor(0),
             palette.getMutedColor(0),
             palette.getDominantColor(0),
+            palette.getVibrantColor(0),
         ).firstOrNull { it != 0 }
         if (sampled != null) {
             sampledTint = Color(sampled.toLong() and 0xFFFFFFFFL)
