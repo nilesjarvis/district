@@ -97,6 +97,7 @@ import com.district.core.design.MonoTrackRow
 import com.district.core.design.MonoVolumeBar
 import com.district.core.design.ShellMetrics
 import com.district.core.design.UpperLabel
+import com.district.core.design.coverTint
 import com.district.domain.Album
 import com.district.domain.Artist
 import com.district.domain.DistrictError
@@ -556,6 +557,7 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
         animationSpec = tween(durationMillis = 170, easing = FastOutSlowInEasing),
         label = "controlZoneHeight",
     )
+    val playerTint = rememberPlayerTint(state.playerState)
     MonoShell(
         header = {
             LibraryTopBar(state, actions)
@@ -570,8 +572,8 @@ private fun LibraryScreen(state: LibraryUiState, actions: AppActions = AppAction
                 LibraryRoute.Downloads -> DownloadsRegion(state, actions)
             }
         },
-        nowPlaying = { NowPlayingFromState(state, actions) },
-        controlZone = { PlayerControlZone(state.playerState, controlActions) },
+        nowPlaying = { NowPlayingFromState(state, actions, playerTint) },
+        controlZone = { PlayerControlZone(state.playerState, controlActions, playerTint) },
         controlZoneHeight = controlZoneHeight,
     )
 }
@@ -1399,11 +1401,8 @@ private fun Modifier.searchAutofocus(): Modifier {
 }
 
 @Composable
-private fun NowPlayingFromState(state: LibraryUiState, actions: AppActions) {
-    val playerState = state.playerState
+private fun rememberPlayerTint(playerState: PlayerState): Color {
     val track = playerState.currentTrack
-    val linkedAlbum = state.albumForTrack(track)
-    val error = playerState.errorMessage?.takeIf { it.isNotBlank() }
     val context = LocalContext.current
     val coverResource = track?.coverArt
     val fallbackTint = track?.tintArgb?.let { Color(it) } ?: MonoTokens.CoverBlue
@@ -1420,11 +1419,26 @@ private fun NowPlayingFromState(state: LibraryUiState, actions: AppActions) {
             .build()
         val result = runCatching { context.imageLoader.execute(request) }.getOrNull() as? SuccessResult
         val bitmap = (result?.drawable as? BitmapDrawable)?.bitmap ?: return@LaunchedEffect
-        val dominant = Palette.from(bitmap).generate().getDominantColor(0)
-        if (dominant != 0) {
-            sampledTint = Color(dominant.toLong() and 0xFFFFFFFFL)
+        val palette = Palette.from(bitmap).generate()
+        val sampled = listOf(
+            palette.getVibrantColor(0),
+            palette.getMutedColor(0),
+            palette.getDominantColor(0),
+        ).firstOrNull { it != 0 }
+        if (sampled != null) {
+            sampledTint = Color(sampled.toLong() and 0xFFFFFFFFL)
         }
     }
+    return sampledTint
+}
+
+@Composable
+private fun NowPlayingFromState(state: LibraryUiState, actions: AppActions, tintColor: Color) {
+    val playerState = state.playerState
+    val track = playerState.currentTrack
+    val linkedAlbum = state.albumForTrack(track)
+    val error = playerState.errorMessage?.takeIf { it.isNotBlank() }
+    val coverResource = track?.coverArt
     MonoNowPlayingBar(
         title = if (error != null && track == null) "Playback error" else track?.title ?: "Ready",
         artist = error ?: track?.artist?.ifBlank { "District" } ?: "District",
@@ -1438,8 +1452,8 @@ private fun NowPlayingFromState(state: LibraryUiState, actions: AppActions) {
         duration = playerState.durationMs.formatDuration(),
         isPlaying = playerState.isPlaying,
         isError = error != null,
-        coverColor = sampledTint,
-        tintColor = sampledTint,
+        coverColor = tintColor,
+        tintColor = tintColor,
         modifier = Modifier
             .testTag("now-playing-bar"),
         onTitleClick = linkedAlbum?.let { album ->
@@ -1484,7 +1498,7 @@ private fun LibraryUiState.albumForTrack(track: Track?): Album? {
 }
 
 @Composable
-private fun PlayerControlZone(playerState: PlayerState, actions: AppActions) {
+private fun PlayerControlZone(playerState: PlayerState, actions: AppActions, tintColor: Color) {
     val haptics = LocalHapticFeedback.current
     val progress = if (playerState.durationMs > 0) playerState.positionMs.toFloat() / playerState.durationMs.toFloat() else 0f
     val scrubGate = remember(playerState.currentTrack?.id) { DetentHapticGate(detents = 100, initialFraction = progress) }
@@ -1496,11 +1510,13 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions) {
         modifier = Modifier
             .fillMaxSize()
             .background(MonoTokens.Panel)
+            .background(coverTint(tintColor, alpha = 0.16f))
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         InteractiveRuler(
             fraction = progress,
+            tintColor = tintColor,
             onChange = { fraction ->
                 if (scrubGate.shouldFire(fraction)) {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1531,6 +1547,7 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions) {
             Spacer(Modifier.width(8.dp))
             InteractiveVolume(
                 volume = playerState.volume,
+                tintColor = tintColor,
                 onChange = { fraction ->
                     if (volumeGate.shouldFire(fraction)) {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1546,14 +1563,14 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions) {
 }
 
 @Composable
-private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
+private fun InteractiveRuler(fraction: Float, tintColor: Color, onChange: (Float) -> Unit) {
     val clamped = fraction.coerceIn(0f, 1f)
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
             .testTag("playback-scrub-ruler")
-            .background(MonoTokens.Line)
+            .background(coverTint(tintColor, alpha = 0.18f))
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -1590,13 +1607,13 @@ private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
             modifier = Modifier
                 .fillMaxHeight()
                 .width(maxWidth * clamped)
-                .background(MonoTokens.Accent.copy(alpha = 0.30f)),
+                .background(coverTint(tintColor, alpha = 0.48f)),
         )
     }
 }
 
 @Composable
-private fun InteractiveVolume(volume: Float, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
+private fun InteractiveVolume(volume: Float, tintColor: Color, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
     var pressActive by remember { mutableStateOf(false) }
     var dragActive by remember { mutableStateOf(false) }
     val isAdjusting = pressActive || dragActive
@@ -1637,14 +1654,14 @@ private fun InteractiveVolume(volume: Float, onChange: (Float) -> Unit, modifier
             modifier = Modifier
                 .fillMaxWidth()
                 .height(barHeight)
-                .background(MonoTokens.Line),
+                .background(coverTint(tintColor, alpha = 0.16f)),
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth(volume.coerceIn(0f, 1f))
                 .height(barHeight)
                 .align(Alignment.CenterStart)
-                .background(MonoTokens.Ink),
+                .background(coverTint(tintColor, alpha = 0.52f)),
         )
     }
 }

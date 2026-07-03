@@ -216,7 +216,7 @@ fun MonoNowPlayingBar(
     Row(
         modifier = modifier
             .fillMaxSize()
-            .background(coverTint(tintColor))
+            .background(coverTint(tintColor, alpha = 0.22f))
             .padding(start = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
