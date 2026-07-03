@@ -54,7 +54,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -1531,7 +1530,7 @@ private fun PlayerControlZone(playerState: PlayerState, actions: AppActions) {
 @Composable
 private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
     val clamped = fraction.coerceIn(0f, 1f)
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
@@ -1569,35 +1568,12 @@ private fun InteractiveRuler(fraction: Float, onChange: (Float) -> Unit) {
                 }
             },
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            // Smooth warm fill for the played portion — no per-segment blocks.
-            drawRect(
-                color = MonoTokens.Accent.copy(alpha = 0.30f),
-                size = Size(w * clamped, h),
-            )
-            // Thin, subtle tick divisions; every fourth reads slightly stronger.
-            val divisions = 24
-            for (i in 1 until divisions) {
-                val x = w * i / divisions
-                val major = i % 4 == 0
-                drawLine(
-                    color = MonoTokens.Line2.copy(alpha = if (major) 0.7f else 0.35f),
-                    start = Offset(x, 0f),
-                    end = Offset(x, h),
-                    strokeWidth = 1f,
-                )
-            }
-            // Bright playhead at the current position.
-            val playhead = (w * clamped).coerceIn(0f, w)
-            drawLine(
-                color = MonoTokens.Ink,
-                start = Offset(playhead, 0f),
-                end = Offset(playhead, h),
-                strokeWidth = 2.dp.toPx(),
-            )
-        }
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(maxWidth * clamped)
+                .background(MonoTokens.Accent.copy(alpha = 0.30f)),
+        )
     }
 }
 
